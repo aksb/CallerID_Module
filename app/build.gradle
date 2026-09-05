@@ -34,7 +34,9 @@ android {
             minifyEnabled false
             // 有正式签名环境变量就用正式签名，没有就退回 debug 签名兜底
             def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
-            signingConfig (ksFile != null && new File(ksFile).exists()) ? signingConfigs.release : signingConfigs.debug
+            def useRealSigning = ksFile != null && new File(ksFile).exists()
+            def chosenSigningConfig = useRealSigning ? signingConfigs.release : signingConfigs.debug
+            signingConfig chosenSigningConfig
         }
     }
     compileOptions {
