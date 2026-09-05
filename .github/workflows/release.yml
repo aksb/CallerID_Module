@@ -1,0 +1,73 @@
+name: Build & Publish Release APK
+
+# 需要在仓库 Settings -> Secrets and variables -> Actions -> Repository secrets
+# 里添加以下4个密钥，release 包才会用正式签名（否则会退回debug签名兜底）：
+#   RELEASE_KEYSTORE_BASE64    keystore文件的base64编码（一整行）
+#   RELEASE_KEYSTORE_PASSWORD  keystore密码
+#   RELEASE_KEY_ALIAS          签名别名
+#   RELEASE_KEY_PASSWORD       签名密码（PKCS12格式下和上面keystore密码相同）
+
+# 打 tag（形如 v3.19、v3.19-sb5、v1.0.0 都可以，只要是 v 开头）会触发这个流程：
+# 编译 release APK，然后创建一个 GitHub Release 并把 APK 作为附件传上去。
+# GitHub Release 的附件对公开仓库是完全公开的，任何人打开 Release 页面
+# 点链接就能下载，不需要登录 GitHub 账号（这点跟 Actions 里的 Artifact 不同，
+# Artifact 必须登录 GitHub 才能下载）。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # 需要这个权限才能创建 Release / 上传附件
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform & build-tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2'
+
+      - name: Decode release keystore from secret
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "RELEASE_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Rename APK with tag name
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/*.apk "out/CallerIDModule-${GITHUB_REF_NAME}.apk"
+
+      - name: Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.apk
+          generate_release_notes: true

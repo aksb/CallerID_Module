@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 来电状态（辅助，Hook 是主路径） -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <!-- 悬浮窗（核心权限） -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 网络（查询百度 API） -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 强制走蜂窝网络查询所需（即使 WiFi 已连接） -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
+    <!-- 开机自启 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- ❌ 已移除 FOREGROUND_SERVICE 和 FOREGROUND_SERVICE_PHONE_CALL -->
+    <!-- 改为普通 Service，彻底规避 Android 14+ 的前台服务类型校验崩溃 -->
+
+    <application
+        android:label="来电识别"
+        android:icon="@android:drawable/ic_menu_call"
+        android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <!-- LSPosed 模块声明 -->
+        <meta-data android:name="xposedmodule"      android:value="true" />
+        <meta-data android:name="xposeddescription"  android:value="来电号码识别悬浮窗" />
+        <meta-data android:name="xposedminversion"   android:value="93" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            普通 Service（已去掉 foregroundServiceType）
+            Android 14+ 前台服务 phoneCall 类型需要成为默认拨号应用，
+            本模块不是拨号应用，使用普通 Service 规避 SecurityException。
+            悬浮窗靠 SYSTEM_ALERT_WINDOW 权限弹出，不依赖前台服务。
+        -->
+        <service
+            android:name=".FloatWindowService"
+            android:exported="false" />
+
+        <!--
+            本地查询服务（v3.19 新增，"结合 SpamBlocker 拦截器"功能）：只监听 127.0.0.1，
+            同理不用前台服务类型，规避 Android 14+ 的 FGS 类型校验。
+            exported=false：只允许本 App 自己（MainActivity/BootReceiver）启动，
+            外部 App 不能直接 startService 拉起它，联动鉴权靠 HTTP 层的 token。
+        -->
+        <service
+            android:name=".QueryServerService"
+            android:exported="false" />
+
+        <!-- 开机自启 -->
+        <receiver android:name=".BootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 接收 Hook 广播 -->
+        <receiver android:name=".CallReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="com.callerid.ACTION_INCOMING" />
+                <action android:name="com.callerid.ACTION_IDLE" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>

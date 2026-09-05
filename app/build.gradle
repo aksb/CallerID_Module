@@ -1,0 +1,58 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.callerid.module'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.callerid.module"
+        minSdk 28
+        targetSdk 35
+        versionCode 44
+        versionName "3.19-sb5"
+    }
+
+    signingConfigs {
+        release {
+            // 正式签名信息从环境变量读取（CI 里由 GitHub Secrets 注入），
+            // 本地没配这几个环境变量时，release 就还是用 debug 签名，
+            // 不影响你在电脑上直接编译。
+            def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
+            if (ksFile != null && new File(ksFile).exists()) {
+                storeFile file(ksFile)
+                storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // 有正式签名环境变量就用正式签名，没有就退回 debug 签名兜底
+            def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
+            signingConfig (ksFile != null && new File(ksFile).exists()) ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    // XposedBridge — compileOnly，不打进 APK，运行时由 LSPosed 框架提供
+    compileOnly 'de.robv.android.xposed:api:82'
+
+    // 网络请求
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // AndroidX（通知帮助类）
+    implementation 'androidx.core:core:1.12.0'
+
+    // 悬浮窗内网页查询：深色/浅色模式控制（WebSettingsCompat / WebViewFeature）
+    implementation 'androidx.webkit:webkit:1.16.0'
+}

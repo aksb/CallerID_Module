@@ -1,0 +1,56 @@
+name: Build APK
+
+# 任意分支 push、发 PR，或手动触发，都会跑一遍编译并把 APK 作为
+# workflow 产物（Artifact）上传，在 Actions 运行详情页底部下载
+# （下载 Artifact 需要登录 GitHub 账号，仅用于自己/协作者验证编译是否通过）。
+# 打 v 开头的 tag 走的是另一个 release.yml，会编译 release 包并发布成
+# 公开的 GitHub Release，任何人不登录也能下载，两边不会重复触发。
+# 仓库里没有 gradlew/gradle-wrapper.jar 二进制文件，这里改用
+# gradle/actions/setup-gradle 直接在 CI 里提供指定版本的 Gradle
+# （版本号跟 gradle/wrapper/gradle-wrapper.properties 里写的 8.2 保持一致），
+# 不依赖仓库自带 wrapper，效果完全一样。
+
+on:
+  push:
+    branches: [ "**" ]
+    tags-ignore: [ "v*" ]   # 打 v 开头的 tag 走 release.yml，避免重复编译
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # AGP 8.2 需要 JDK 17
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform & build-tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2'
+
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CallerIDModule-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
