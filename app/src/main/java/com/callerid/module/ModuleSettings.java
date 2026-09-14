@@ -619,8 +619,13 @@ public class ModuleSettings {
     // 避免以后改文案导致历史展开/折叠状态丢失。
 
     public static boolean isBoardExpanded(Context ctx, String boardId) {
+        return isBoardExpanded(ctx, boardId, true);
+    }
+
+    /** 同上，但可以指定"从没存过值时"的默认展开/收起状态（v4.0 新增，"保活明细"要求默认收起）。 */
+    public static boolean isBoardExpanded(Context ctx, String boardId, boolean defaultExpanded) {
         init(ctx);
-        return sp.getBoolean(KEY_BOARD_EXPANDED_PREFIX + boardId, true);
+        return sp.getBoolean(KEY_BOARD_EXPANDED_PREFIX + boardId, defaultExpanded);
     }
 
     public static void setBoardExpanded(Context ctx, String boardId, boolean expanded) {

@@ -17,13 +17,31 @@
     <!-- 开机自启 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+        申请忽略电池优化用（v4.0 新增，"Root保活教程"板块里"申请忽略电池优化
+        （无需 Root）"按钮需要这个权限才能弹出系统那个"允许后台运行"对话框）。
+        这是普通权限，安装时自动授予，不会弹运行时权限请求框。
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- ❌ 已移除 FOREGROUND_SERVICE 和 FOREGROUND_SERVICE_PHONE_CALL -->
     <!-- 改为普通 Service，彻底规避 Android 14+ 的前台服务类型校验崩溃 -->
 
+    <!--
+        v4.2 新增：android:persistent="true"。这一行对普通安装的 APK 完全没有
+        任何效果——安卓只对系统应用（/system 分区、平台签名或 priv-app）承认这个
+        属性，非系统应用的话会被系统直接忽略，加不加都不影响你现在装的这个普通
+        版本。只有配合另外的"系统化增强" Magisk 模块把本 App 变成系统应用之后，
+        这一行才会真正生效：系统会把这个进程按接近系统核心进程的优先级对待，
+        内存紧张时尽量最后才考虑回收，用来缓解低内存机型上"常驻实例被系统按
+        内存压力回收"这种情况（这不是 Doze/电池优化那一套机制，是另一套基于
+        进程重要性打分的内存回收机制，appops 保活命令覆盖不到这里）。
+    -->
     <application
         android:label="来电识别"
         android:icon="@android:drawable/ic_menu_call"
         android:allowBackup="false"
+        android:persistent="true"
         android:networkSecurityConfig="@xml/network_security_config">
 
         <!-- LSPosed 模块声明 -->

@@ -9,6 +9,10 @@ name: Build APK
 # gradle/actions/setup-gradle 直接在 CI 里提供指定版本的 Gradle
 # （版本号跟 gradle/wrapper/gradle-wrapper.properties 里写的 8.2 保持一致），
 # 不依赖仓库自带 wrapper，效果完全一样。
+#
+# v4.2 新增：每次 push 顺手也打包一下 magisk-module/ 里的 Magisk 保活模块，
+# 方便平时随时验证打包结构对不对，不用等正式打 tag。这里出的是 dev 版本号
+# （commit 短哈希），不是正式发布用的版本号——正式版本号跟随 tag，见 release.yml。
 
 on:
   push:
@@ -53,4 +57,26 @@ jobs:
         with:
           name: CallerIDModule-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # 每次 push 顺手也打包一下 Magisk 保活模块的 zip，方便平时开发阶段随时
+      # 验证打包对不对，不用等到正式打 tag 才第一次看到打包结果。这里没有 tag
+      # 可用，用 7 位短 commit SHA 当版本号（不是正式 Release 的版本号，只是
+      # 方便区分是哪次 push 出的包）。
+      - name: Package Magisk keep-alive module (dev build)
+        run: |
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          MODVER="dev-${SHORT_SHA}"
+          WORKDIR=$(mktemp -d)
+          cp -r magisk-module/. "$WORKDIR/"
+          sed -i "s/^version=.*/version=v${MODVER}/" "$WORKDIR/module.prop"
+          sed -i "s/^versionCode=.*/versionCode=${{ github.run_number }}/" "$WORKDIR/module.prop"
+          mkdir -p out
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-KeepAlive-Magisk-${MODVER}.zip" . -x ".*" )
+
+      - name: Upload Magisk module artifact (dev build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CallerIDModule-KeepAlive-Magisk-dev
+          path: out/CallerIDModule-KeepAlive-Magisk-*.zip
           if-no-files-found: error

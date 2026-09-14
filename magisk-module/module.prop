@@ -1,0 +1,6 @@
+id=callerid_keepalive
+name=CallerIDModule 保活助手
+version=v1.0
+versionCode=1
+author=you
+description=不包含任何 APK，纯脚本模块：开机自动给「来电识别」(com.callerid.module) 打开电池优化白名单/后台运行等 appops 保活开关，效果等同于手动敲 adb/root 命令。没装这个包名的 App 时脚本自动跳过、不做任何事；卸载这个模块也不会影响已安装的 App，只是不再开机自动保活。Magisk App 里点这个模块的 Action 按钮可以不重启手机、立即重新执行一次。

@@ -77,6 +77,16 @@ public class MainActivity extends Activity {
     private ManagedListSection cacheSection;
     private ManagedListSection userSection;
 
+    // 板块展开触发器（v4.0 新增）：boardId -> "如果还没展开就展开它"的动作，
+    // 供顶部"保活状态"那行的"去处理 →"链接跳转到下面对应板块使用。
+    // 在 addCollapsibleBoard() 里注册，不需要每个板块手动维护自己的 header/content 引用。
+    private final java.util.Map<String, Runnable> boardExpandTriggers = new java.util.LinkedHashMap<>();
+    // 同上，配套记录每个板块 header 行的 View，方便"去处理 →"顺便把 ScrollView 滚动过去。
+    private final java.util.Map<String, View> boardHeaderRows = new java.util.LinkedHashMap<>();
+
+    // 保活相关的顶部状态刷新逻辑（v4.0 新增），onResume 里也要用，所以提到字段级别的 Runnable。
+    private Runnable refreshKeepAliveStatus;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -88,6 +98,12 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(0xFF121212);
         root.setPadding(dp(16), dp(12), dp(16), dp(16));
+
+        // 供顶部"保活状态"那行的"去处理 →"链接跳转/滚动到下面"Root保活教程"板块用
+        // （v4.0 新增）：ScrollView 真正创建之后才会被赋值，但点击回调本身是在
+        // 用户点击时才执行，那时候早就赋值完了，所以用数组包一层来绕开"局部变量
+        // 必须先声明再使用"这条 Java 语法限制。
+        final ScrollView[] scrollViewHolder = new ScrollView[1];
 
         add(root, title("📞 来电识别", 20, Color.WHITE), 0);
         add(root, title("v1.5  基于百度号码查询页解析", 12, 0xFF44CC44), 4);
@@ -115,6 +131,63 @@ public class MainActivity extends Activity {
         tvTopSbLinkage.setTextSize(13);
         add(root, tvTopSbLinkage, 4);
 
+        // ── 保活状态（v4.0 新增）：第四行，接在上面三行下面 ────────────────
+        // "已保活/未保活"这句话本身 + 默认收起的明细列表 + 跳转到下面
+        // "Root保活教程"板块的"去处理 →"链接。这里只负责摆控件和挂刷新逻辑，
+        // 真正的检查逻辑在 KeepAliveHelper 里，且都在后台线程跑，不卡启动。
+        TextView tvTopKeepAlive = new TextView(this);
+        tvTopKeepAlive.setTextSize(13);
+        add(root, tvTopKeepAlive, 4);
+
+        LinearLayout keepAliveDetailBox = new LinearLayout(this);
+        keepAliveDetailBox.setOrientation(LinearLayout.VERTICAL);
+        TextView tvKeepAliveDetail = title("", 12, 0xFF999999);
+        tvKeepAliveDetail.setLineSpacing(0, 1.3f);
+        add(keepAliveDetailBox, tvKeepAliveDetail, 4);
+        addWarningFold(root, "keepalive_detail", "保活明细", keepAliveDetailBox, 2, false);
+
+        TextView tvKeepAliveJump = new TextView(this);
+        tvKeepAliveJump.setTextSize(12);
+        tvKeepAliveJump.setMovementMethod(LinkMovementMethod.getInstance());
+        add(root, tvKeepAliveJump, 4);
+
+        refreshKeepAliveStatus = () -> new Thread(() -> {
+            KeepAliveHelper.Status st = KeepAliveHelper.check(this);
+            runOnUiThread(() -> {
+                setStatusText(tvTopKeepAlive, "保活状态：", st.allGood(), "已保活", "未保活");
+
+                StringBuilder detail = new StringBuilder();
+                detail.append(st.overlayGranted ? "✅" : "❌").append(" 悬浮窗权限\n");
+                detail.append(st.batteryIgnored ? "✅" : "❌").append(" 电池优化白名单\n");
+                detail.append(st.standbyOk ? "✅" : "❌").append(" 应用待机分桶\n");
+                detail.append("ℹ️ RUN_IN_BACKGROUND 等 appops 项没有公开读取 API，App 自己查不到，"
+                        + "已执行请参考下方「Root保活教程」里的验证命令自行确认。");
+                tvKeepAliveDetail.setText(detail.toString());
+
+                SpannableString jump = new SpannableString("去处理 →");
+                jump.setSpan(new ClickableSpan() {
+                    @Override
+                    public void onClick(View widget) {
+                        Runnable trigger = boardExpandTriggers.get("root_keepalive");
+                        if (trigger != null) trigger.run();
+                        View target = boardHeaderRows.get("root_keepalive");
+                        ScrollView scroller = scrollViewHolder[0];
+                        if (target != null && scroller != null) {
+                            scroller.post(() -> scroller.smoothScrollTo(0, Math.max(0, target.getTop() - dp(12))));
+                        }
+                    }
+
+                    @Override
+                    public void updateDrawState(TextPaint ds) {
+                        ds.setColor(0xFF2196F3);
+                        ds.setUnderlineText(false);
+                    }
+                }, 0, jump.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                tvKeepAliveJump.setText(jump);
+            });
+        }, "CallerID-KeepAliveCheck").start();
+        refreshKeepAliveStatus.run();
+
         add(root, line(), 14);
         LinearLayout boardPermService = new LinearLayout(this);
         boardPermService.setOrientation(LinearLayout.VERTICAL);
@@ -139,10 +212,23 @@ public class MainActivity extends Activity {
         TextView tvServiceStatus = new TextView(this);
         tvServiceStatus.setTextSize(14); // 和按钮文字一样大
         add(boardPermService, tvServiceStatus, 6);
+
+        TextView tvServiceStatusHint = title(
+                "闲置是常见现象（尤其内存较小的机型），不代表来电悬浮窗弹不出来——"
+              + "每次真实来电都会独立重新拉起，不依赖这个常驻状态。不放心的话，"
+              + "用下面「模拟来电测试」直接验证一次就知道准不准。",
+                11, 0xFF777777);
+        add(boardPermService, tvServiceStatusHint, 2);
+
         Runnable refreshServiceStatus = () -> {
             boolean running = isFloatServiceRunning();
-            setStatusText(tvServiceStatus, running, "已启动", "已停止");
-            setStatusText(tvTopServiceStatus, "来电识别服务状态：", running, "已启动", "已停止");
+            if (running) {
+                setStatusText(tvServiceStatus, "当前状态：", "已启动", 0xFF44CC44);
+                setStatusText(tvTopServiceStatus, "来电识别服务状态：", "已启动", 0xFF44CC44);
+            } else {
+                setStatusText(tvServiceStatus, "当前状态：", "闲置", 0xFFFFA726);
+                setStatusText(tvTopServiceStatus, "来电识别服务状态：", "闲置", 0xFFFFA726);
+            }
         };
         refreshServiceStatus.run();
 
@@ -1243,20 +1329,66 @@ public class MainActivity extends Activity {
         LinearLayout boardRootKeepAlive = new LinearLayout(this);
         boardRootKeepAlive.setOrientation(LinearLayout.VERTICAL);
         addCollapsibleBoard(root, "root_keepalive", "Root保活教程", boardRootKeepAlive);
+
+        // ── 免 Root 的电池优化申请（v4.0 保留，v4.1 去掉了需要 root 的"一键保活"按钮） ──
+        // 去掉原因：Magisk 的 root 授权是全有或全无的，一旦同意，本 App 拿到的不是
+        // "只能跑这几条命令"的权限，而是任意 root 命令的权限。配套的 Magisk 保活模块
+        // （service.sh / action.sh）压根不用走"授权某个 App root"这条路，效果完全
+        // 一样，不需要把 root 交给这个功能复杂得多的 App，所以把这部分从 App 里去掉了。
         add(boardRootKeepAlive, title(
-                "Root 保活（防止 Service 被杀），以下ADB、shell命令二选一，选择一个自己合适的。命令可直接长按选择复制\n\n"
-              + "ADB命令（手机数据线连接电脑）：\n\n"
+                "下面三种方式效果完全一样（本质上跑的是同一套命令），任选其一，哪个方便用哪个：\n"
+              + "① ADB 命令（电脑 + 数据线，不需要设备 root）\n"
+              + "② 手机本地终端，如 Termux / MT管理器（需要设备已 root）\n"
+              + "③ Magisk 保活模块的 Action 按钮（需要设备已 root、装了配套 Magisk 模块，"
+              + "不用重启手机，一下就能重新执行一次）",
+                12, 0xFF44CC44), 8);
+
+        Button btnKeepAliveNoRoot = btn("🔋 申请忽略电池优化（无需 Root）", 0xFF1565C0);
+        add(boardRootKeepAlive, btnKeepAliveNoRoot, 8);
+        add(boardRootKeepAlive, title(
+                "这一项走系统标准弹窗，不需要 root，能顺手解决三种方式里都要处理的"
+              + "「电池优化白名单」这一条，剩下几条 appops 项还是得用下面 ①②③ 之一。",
+                11, 0xFF777777), 4);
+
+        btnKeepAliveNoRoot.setOnClickListener(v -> {
+            try {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            } catch (Exception e) {
+                toast("无法打开系统电池优化设置：" + e);
+            }
+        });
+
+        add(boardRootKeepAlive, title(
+                "以下命令可直接长按选中复制。不会对系统造成影响，不用了正常卸载本 App 即可，"
+              + "无需额外操作。\n\n"
+              + "① ADB 命令（电脑上敲，手机数据线连接电脑，不需要设备本身 root）：\n\n"
+              + "  adb shell cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow\n"
               + "  adb shell cmd appops set com.callerid.module RUN_IN_BACKGROUND allow\n"
-              + "  adb shell dumpsys deviceidle whitelist +com.callerid.module\n\n"
-              + "shell命令（手机Termux 或 MT管理器 等终端运行，需要root权限）\n"
-              + "先输入：\n"
-              + "su\n"
-              + "然后回车。授权root权限，Termux窗口内出现#标识，\n\n"
-              + "再输入下面的代码：\n\n"
+              + "  adb shell cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow\n"
+              + "  adb shell dumpsys deviceidle whitelist +com.callerid.module\n"
+              + "  adb shell am set-inactive com.callerid.module false\n\n"
+              + "② 手机本地终端命令（Termux / MT管理器等，需要设备已 root）：\n"
+              + "先输入 su 回车，授权 root 权限，窗口出现 # 标识后，再依次输入：\n\n"
               + "cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow\n"
               + "cmd appops set com.callerid.module RUN_IN_BACKGROUND allow\n"
-              + "dumpsys deviceidle whitelist +com.callerid.module\n\n"
-              + "回车成功，可以把返回结果发给Ai帮忙确认是否正确配置。以上命令不会对系统造成影响，不用本app正常卸载即可，无需额外操作。",
+              + "cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow\n"
+              + "dumpsys deviceidle whitelist +com.callerid.module\n"
+              + "am set-inactive com.callerid.module false\n\n"
+              + "③ Magisk 保活模块：装好配套的 Magisk 模块后（模块本身不含 APK，只要装了这个"
+              + "包名的 App 就自动生效），在 Magisk App 里找到这个模块，点它的 Action 按钮，"
+              + "就是立即执行一次上面这五条命令，不用重启手机；也可以什么都不点，模块本身开机时"
+              + "会自动执行一次。\n\n"
+              + "验证命令是否生效（在①②任一种终端环境里执行，纯读取，不会改任何东西）：\n\n"
+              + "cmd appops get com.callerid.module RUN_IN_BACKGROUND\n"
+              + "cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND\n"
+              + "dumpsys deviceidle whitelist | grep com.callerid.module\n"
+              + "am get-inactive com.callerid.module\n\n"
+              + "前两条正常应该输出包含 allow 字样；第三条能搜到 com.callerid.module 这一行"
+              + "说明已经在白名单里（搜不到说明命令没生效或者还没执行过）；第四条正常应该输出"
+              + "Idle=false。如果哪一条对不上，可以把完整输出发给 AI 帮忙看看是不是命令在你这台"
+              + "设备上语法/权限有差异。",
                 12, 0xFF777777), 8);
 
         // ── 关于本软件（v3.20 新增，v3.20-2 补全真实地址，v3.21 标题居中+整体下移+新增更新地址） ──
@@ -1271,6 +1403,7 @@ public class MainActivity extends Activity {
         ScrollView sv = new ScrollView(this);
         sv.setBackgroundColor(0xFF121212);
         sv.addView(root);
+        scrollViewHolder[0] = sv;
         setContentView(sv);
     }
 
@@ -1282,6 +1415,12 @@ public class MainActivity extends Activity {
         CacheStore.setOnCacheUpdatedListener(() -> runOnUiThread(() -> {
             if (cacheSection != null) cacheSection.refresh();
         }));
+        // 每次真正回到前台都现查一次保活状态（v4.0 新增）——不存历史 flag，
+        // 系统设置随时可能在用户不知情的情况下变化（被 ROM 升级重置、被手动
+        // 关掉电池白名单等），onResume 比只在 onCreate 里查一次更贴近"每次
+        // 打开 App 都看到真实状态"的要求（同一个 Activity 实例被切回前台时
+        // onCreate 不会重新跑，但 onResume 会）。
+        if (refreshKeepAliveStatus != null) refreshKeepAliveStatus.run();
     }
 
     @Override
@@ -2219,6 +2358,14 @@ public class MainActivity extends Activity {
             ModuleSettings.setBoardExpanded(this, boardId, newExpanded);
         });
 
+        // v4.0 新增：登记这个板块的"展开"动作和 header 行本身，供其它地方（比如顶部
+        // "保活状态"的"去处理 →"链接）以 boardId 找到并触发展开/滚动过去，不用每个
+        // 调用点都手动维护自己的 headerRow/content 引用。
+        boardExpandTriggers.put(boardId, () -> {
+            if (content.getVisibility() != View.VISIBLE) headerRow.performClick();
+        });
+        boardHeaderRows.put(boardId, headerRow);
+
         add(root, headerRow, 10);
         add(root, content, 0);
     }
@@ -2241,7 +2388,12 @@ public class MainActivity extends Activity {
      * @param topDp     header 行相对上一个控件的顶部间距（dp）
      */
     private void addWarningFold(LinearLayout root, String boardId, String titleText, LinearLayout content, int topDp) {
-        boolean expanded = ModuleSettings.isBoardExpanded(this, boardId); // 首次安装（没有存储值）默认展开
+        addWarningFold(root, boardId, titleText, content, topDp, true);
+    }
+
+    /** 同上，但可以指定"从没展开/收起过时"的默认状态（v4.0 新增，"保活明细"要求默认收起）。 */
+    private void addWarningFold(LinearLayout root, String boardId, String titleText, LinearLayout content, int topDp, boolean defaultExpanded) {
+        boolean expanded = ModuleSettings.isBoardExpanded(this, boardId, defaultExpanded);
 
         TextView tvHeader = new TextView(this);
         tvHeader.setText((expanded ? "▼ 收起 " : "▶ 展开 ") + titleText);
@@ -2338,9 +2490,21 @@ public class MainActivity extends Activity {
     private void setStatusText(TextView tv, String label, boolean isOn, String onLabel, String offLabel) {
         String value = isOn ? onLabel : offLabel;
         int color = isOn ? 0xFF44CC44 : 0xFFFF3333;
+        setStatusText(tv, label, value, color);
+    }
+
+    /**
+     * 同上，但不是简单的"好/坏"二元状态，而是给一个中性、不报警的颜色和自定义文案
+     * （v4.2 新增，"来电识别服务"这一行专用——常驻实例是否存在，跟"来电时弹不弹得出
+     * 悬浮窗"其实是两件不完全相关的事：常驻实例被系统按内存压力回收掉是正常现象，
+     * 每次真实来电都会由 CallReceiver 独立重新拉起一个新实例，不依赖常驻实例是否
+     * 还活着。用刺眼的红色"已停止"容易让人误以为功能坏了，这里改成中性的橙色
+     * "闲置"，并在旁边点一句"不影响来电弹窗"）。
+     */
+    private void setStatusText(TextView tv, String label, String value, int valueColor) {
         SpannableString ss = new SpannableString(label + value);
         ss.setSpan(new ForegroundColorSpan(0xFF888888), 0, label.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        ss.setSpan(new ForegroundColorSpan(color), label.length(), ss.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        ss.setSpan(new ForegroundColorSpan(valueColor), label.length(), ss.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         tv.setText(ss);
     }
 
