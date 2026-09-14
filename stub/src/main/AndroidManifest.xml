@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        这里故意不声明任何 Activity/Service/Receiver，尤其是不声明任何
+        LAUNCHER intent-filter：这样占位 APK 装在系统分区之后，不会出现在
+        桌面上，也就不存在"用户看到一个默认安卓机器人图标、点开就闪退"这种
+        体验问题——真正的 App 装上去之前，它在系统里就是完全不可见、
+        不可交互的一个空壳。
+
+        android:persistent="true" 跟 :app 里加的那一条保持一致，配合下面
+        systemize-module 把它装进 /system/priv-app 才会真正生效。
+    -->
+    <application
+        android:label="来电识别"
+        android:icon="@android:drawable/ic_menu_call"
+        android:allowBackup="false"
+        android:persistent="true"
+        android:hasCode="false">
+    </application>
+
+</manifest>

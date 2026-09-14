@@ -5,6 +5,10 @@
 # 只认包名，不关心 APK 是哪个版本、什么时候装的——这也是这个模块的设计初衷：
 # 模块本身不带 APK，装没装、装的哪个版本跟这个模块完全无关，模块只负责
 # "这个包名在，就把保活开关打开"这一件事。
+#
+# v4.3 起：每一条命令执行完都立刻用对应的只读命令验证一遍，直接给中文
+# 结果（已启用 ✔ / 未启用 ✘），不用再另外跑一遍"验证命令"去肉眼比对
+# 英文输出里有没有 allow 字样。
 
 PKG="com.callerid.module"
 
@@ -17,25 +21,51 @@ run_keepalive() {
 
     if ! pm path "$PKG" >/dev/null 2>&1; then
         log "未检测到 $PKG，跳过（没装这个 App，或者 App 还没装完），模块本身不做任何事"
+        echo "未检测到「来电识别」App，跳过，模块本身不做任何事"
         return 0
     fi
 
     log "检测到 $PKG，开始执行保活命令"
 
-    # 悬浮窗权限——正常来说用户在 App 里手动授权过就已经生效，这里再 set 一次
-    # 纯粹是兜底（比如用户清过一次授权记录），不会有副作用。
-    cmd appops set "$PKG" SYSTEM_ALERT_WINDOW allow    >> "$LOG" 2>&1
+    # $1 中文项目名  $2 设置命令  $3 验证命令  $4 验证命令输出里代表"已生效"
+    # 要匹配到的关键字。设置命令和验证命令都用 eval 执行，方便把带参数、
+    # 带管道的完整命令当字符串传进来。
+    set_and_check() {
+        DESC="$1"
+        eval "$2" >> "$LOG" 2>&1
+        if eval "$3" 2>/dev/null | grep -q "$4"; then
+            RESULT="已启用 ✔"
+        else
+            RESULT="未启用 ✘"
+        fi
+        log "$DESC：$RESULT"
+        echo "$DESC：$RESULT"
+    }
 
-    # appops 里没有公开读取 API 的两项，只能靠 root 直接 set。
-    cmd appops set "$PKG" RUN_IN_BACKGROUND allow       >> "$LOG" 2>&1
-    cmd appops set "$PKG" RUN_ANY_IN_BACKGROUND allow   >> "$LOG" 2>&1
+    set_and_check "悬浮窗权限" \
+        "cmd appops set $PKG SYSTEM_ALERT_WINDOW allow" \
+        "cmd appops get $PKG SYSTEM_ALERT_WINDOW" "allow"
 
-    # 电池优化 Doze 白名单。
-    dumpsys deviceidle whitelist +"$PKG"                >> "$LOG" 2>&1
+    # appops 里没有公开对外承诺的读取 API，App 自己（用公开 SDK）查不到这
+    # 两项，但这里是用 root/shell 身份跑 cmd 工具本身去查，跟"App 自己能不
+    # 能查"是两回事，可以正常拿到结果。
+    set_and_check "后台运行权限" \
+        "cmd appops set $PKG RUN_IN_BACKGROUND allow" \
+        "cmd appops get $PKG RUN_IN_BACKGROUND" "allow"
+
+    set_and_check "任意后台运行权限" \
+        "cmd appops set $PKG RUN_ANY_IN_BACKGROUND allow" \
+        "cmd appops get $PKG RUN_ANY_IN_BACKGROUND" "allow"
+
+    set_and_check "电池优化白名单" \
+        "dumpsys deviceidle whitelist +$PKG" \
+        "dumpsys deviceidle whitelist" "$PKG"
 
     # 把 App 从"待机分桶限制"里摘出来，是对上面 deviceidle 白名单的补充，
     # 不是每个 ROM 都严格遵守，但无害，可以放心跑。
-    am set-inactive "$PKG" false                        >> "$LOG" 2>&1
+    set_and_check "待机分桶限制已解除" \
+        "am set-inactive $PKG false" \
+        "am get-inactive $PKG" "Idle=false"
 
     log "保活命令执行完毕"
 

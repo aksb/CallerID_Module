@@ -2,6 +2,24 @@ plugins {
     id 'com.android.application'
 }
 
+// 版本号统一从仓库根目录的 version.properties 读取（唯一来源，见该文件
+// 里的说明），本地在 Android Studio 里直接编译时如果读不到该文件，
+// 兜底给 "dev" 不会导致构建失败。
+def versionProps = new Properties()
+def versionPropsFile = rootProject.file("version.properties")
+if (versionPropsFile.exists()) {
+    versionPropsFile.withInputStream { versionProps.load(it) }
+}
+def appVersionName = versionProps.getProperty("version", "dev")
+
+// versionCode 必须严格递增，但又不想跟上面这个人读的版本号字符串强行换算
+// （"4.3" 和 "4.21" 谁大谁小容易产生歧义）。这里改成完全独立的一套方案：
+// 由 CI 在构建时用当次构建的 UTC 时间戳（精确到分钟）注入 CI_VERSION_CODE
+// 环境变量，天然严格递增、无歧义，本地没有这个环境变量时兜底给 1
+// （本地构建不发布，不影响什么）。
+def envVersionCode = System.getenv("CI_VERSION_CODE")
+def appVersionCode = envVersionCode != null ? envVersionCode.toInteger() : 1
+
 android {
     namespace 'com.callerid.module'
     compileSdk 35
@@ -10,8 +28,8 @@ android {
         applicationId "com.callerid.module"
         minSdk 28
         targetSdk 35
-        versionCode 48
-        versionName "4.2"
+        versionCode appVersionCode
+        versionName appVersionName
     }
 
     signingConfigs {

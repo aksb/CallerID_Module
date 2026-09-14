@@ -28,17 +28,25 @@ am set-inactive com.callerid.module false
 
 ## 验证是否生效
 
-在 Termux 或 ADB shell 里执行（纯读取，不会改任何东西）：
+v4.3 起，本模块每次执行（开机自动执行，或者点 Action 按钮手动执行）都会
+直接输出中文结果，不需要你再自己去跑命令肉眼比对英文输出。如果还是想在
+Termux / ADB shell 里手动跑一遍确认，下面每条都是"设置 + 判断 + 中文
+输出"合并成的单行命令，可以逐条整行复制粘贴执行（特意写成单行，避免
+Termux 粘贴多行命令有时候会出错的问题）：
 
 ```
-cmd appops get com.callerid.module RUN_IN_BACKGROUND
-cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND
-dumpsys deviceidle whitelist | grep com.callerid.module
-am get-inactive com.callerid.module
+cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo "悬浮窗权限：已启用 ✔" || echo "悬浮窗权限：未启用 ✘"
+cmd appops set com.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo "后台运行权限：已启用 ✔" || echo "后台运行权限：未启用 ✘"
+cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo "任意后台运行权限：已启用 ✔" || echo "任意后台运行权限：未启用 ✘"
+dumpsys deviceidle whitelist +com.callerid.module; dumpsys deviceidle whitelist | grep -q com.callerid.module && echo "电池优化白名单：已启用 ✔" || echo "电池优化白名单：未启用 ✘"
+am set-inactive com.callerid.module false; am get-inactive com.callerid.module | grep -q "Idle=false" && echo "待机分桶限制：已解除 ✔" || echo "待机分桶限制：未解除 ✘"
 ```
 
-前两条正常应该输出包含 `allow` 字样；第三条能搜到 `com.callerid.module`
-这一行说明已经在白名单里；第四条正常应该输出 `Idle=false`。
+需要用 adb 从电脑上敲的话，整条包一层引号即可，例如：
+
+```
+adb shell 'cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo "悬浮窗权限：已启用 ✔" || echo "悬浮窗权限：未启用 ✘"'
+```
 
 ## 安装
 
@@ -51,8 +59,14 @@ am get-inactive com.callerid.module
 ## 不重启手动触发
 
 Magisk App 里这个模块条目会有一个 **Action** 按钮，点一下就用 root
-立即重新跑一次上面那几条命令，不用重启手机——原理是模块自带一个
-`action.sh`，这是 Magisk 从 v24+ 开始支持的标准功能。
+立即重新跑一次上面那几条命令、并直接用中文显示每一项结果，不用重启
+手机——原理是模块自带一个 `action.sh`，这是 Magisk 从 v24+ 开始支持的
+标准功能。
+
+**注意：这个按钮只有在模块刷入并重启过一次之后才会出现**，这是 Magisk
+本身的机制（模块要先被挂载生效，Magisk App 才会显示它的 Action 入口），
+刚刷完还没重启时看不到这个按钮属于正常现象。等按钮出现之后，点击执行
+本身就不需要再重启了。
 
 ## 卸载
 

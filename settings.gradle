@@ -20,3 +20,10 @@ dependencyResolutionManagement {
 
 rootProject.name = "CallerIDModule"
 include ':app'
+// 系统化增强 Magisk 模块用的"占位 APK"——包名跟 :app 完全一样，但没有任何
+// 真实功能、也没有桌面图标（不声明 LAUNCHER），必须用跟 :app 完全相同的
+// release 签名 key 签名。用途见 stub/README.md 和 systemize-module/customize.sh
+// 里的说明（RecordYou 同款思路：装在系统分区当占位符，之后不管是先装正式
+// APK 还是先刷模块，Android 都会把正式 APK 当成对这个系统应用的"更新"来
+//处理，不需要现场卸载重装）。
+include ':stub'

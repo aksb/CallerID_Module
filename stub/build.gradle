@@ -1,0 +1,60 @@
+// 系统化增强 Magisk 模块用的"占位 APK"。
+//
+// 这个模块编出来的 APK 跟 :app **包名完全一样**（com.callerid.module），
+// 但没有任何真实功能、没有 Activity、不声明 LAUNCHER（不会出现在桌面，
+// 避免真正的 App 还没装时用户点到它然后闪退）。它的唯一作用是被
+// systemize-module 这个 Magisk 模块打包进去、刷到 /system/priv-app 里占位。
+//
+// 关键点：这里的 release 签名配置必须跟 app/build.gradle 里的完全一致
+// （同一套环境变量、同一把 key）。占位 APK 和以后每一次正式发布的 :app
+// APK，签名必须一模一样，Android 才会把正式 APK 当成"对这个系统应用的
+// 更新"来处理——这是这个方案能"不管先装 App 还是先刷模块都可以"的
+// 唯一前提。如果本地没配这几个签名环境变量，就退回 debug 签名兜底，
+// 但那样打出来的占位 APK 跟正式签名的 :app 产物签名对不上，不能真的
+// 拿去刷机，只能用来本地读源码/走一遍构建流程。
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.callerid.module.stub'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.callerid.module"
+        minSdk 28
+        targetSdk 35
+        // 故意写死成一个极低的值，且以后永远不变。:app 的 versionCode 由
+        // CI 用构建时间戳自动生成（远大于 1，见 app/build.gradle 里的说明），
+        // 占位 APK 只要保证比 :app 曾经发布过的任何版本都低，就能保证
+        // "无论什么时候安装真正的 APK，都会被当成更新而不是被当成降级拒绝"。
+        versionCode 1
+        versionName "placeholder"
+    }
+
+    signingConfigs {
+        release {
+            def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
+            if (ksFile != null && new File(ksFile).exists()) {
+                storeFile file(ksFile)
+                storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
+            def useRealSigning = ksFile != null && new File(ksFile).exists()
+            signingConfig useRealSigning ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}

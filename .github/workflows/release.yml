@@ -13,10 +13,21 @@ name: Build & Publish Release APK
 # 点链接就能下载，不需要登录 GitHub 账号（这点跟 Actions 里的 Artifact 不同，
 # Artifact 必须登录 GitHub 才能下载）。
 #
-# v4.2 新增：同一次 Release 里还会一起带上 magisk-module/ 打包出来的 Magisk
-# 保活模块 zip，文件名和 module.prop 里的版本号都用这次的 tag 命名，跟 APK
-# 版本号保持一致——用户在同一个 Release 页面就能同时下载 APK 和保活模块，
-# 不需要再去找另一个仓库。
+# v4.3 起：
+#   - tag 本身只作为"要不要正式公开发布"的触发信号，不再直接决定版本号
+#     文本——版本号统一从仓库根目录的 version.properties 读取，跟
+#     build.yml（push 触发的 dev 构建）用的是同一个文件，三个产物
+#     （APK / KeepAlive 保活模块 / Systemize 系统化模块）的文件名、
+#     module.prop 版本号都自动保持一致。打 tag 前记得先把
+#     version.properties 里的版本号改成这次要发的号。
+#   - versionCode（Android/Magisk 都要求严格递增的那个整数）不从版本号
+#     字符串换算，改成用当次构建的 UTC 时间（精确到分钟的时间戳）自动
+#     生成，天然严格递增，无需人管，也不会跟 build.yml 的 dev 构建撞号
+#     （dev 构建更早，时间戳天然更小）。
+#   - 新增打包 Systemize 系统化模块：内置的"占位 APK"由 :stub 模块编译，
+#     这里用的是跟 :app 完全相同的正式签名 key（同一组 RELEASE_KEYSTORE_*
+#     secret），保证占位 APK 和这次发布的正式 APK 签名一致——这是
+#     Systemize 模块"先装 App/先刷模块顺序随意"这套机制能生效的前提。
 
 on:
   push:
@@ -54,6 +65,15 @@ jobs:
         with:
           gradle-version: '8.2'
 
+      - name: Compute shared version info
+        id: ver
+        run: |
+          VERSION=$(grep '^version=' version.properties | cut -d= -f2)
+          VCODE=$(( $(date -u +%s) / 60 ))
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "vcode=${VCODE}" >> "$GITHUB_OUTPUT"
+          echo "本次发布版本号：${VERSION}（触发 tag：${GITHUB_REF_NAME}），versionCode：${VCODE}"
+
       - name: Decode release keystore from secret
         run: |
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
@@ -61,31 +81,45 @@ jobs:
 
       - name: Build release APK
         env:
+          CI_VERSION_CODE: ${{ steps.ver.outputs.vcode }}
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: gradle :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Rename APK with tag name
+      - name: Rename APK with shared version
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/*.apk "out/CallerIDModule-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/release/*.apk "out/CallerIDModule-${{ steps.ver.outputs.version }}.apk"
 
-      # v4.2 新增：正式发布时，Magisk 保活模块也用同一个 tag 命名、一起打包，
-      # module.prop 里的版本号也同步替换成这个 tag，跟 APK 版本号保持一致，
-      # 不需要你手动去改模块那边的版本号——打一次 tag，两边自动对齐。
-      # 注意：这只是文件名/版本号跟着同步，不代表模块脚本内容也跟着变了；
-      # 就算这次 tag 只改了跟保活完全无关的功能，模块也会重新打包发一次
-      # （脚本内容没变），这是"两边版本号永远一致"这个设计本身的自然结果。
-      - name: Package Magisk keep-alive module (release build)
+      - name: Package Magisk keep-alive module
         run: |
           WORKDIR=$(mktemp -d)
           cp -r magisk-module/. "$WORKDIR/"
-          sed -i "s/^version=.*/version=${GITHUB_REF_NAME}/" "$WORKDIR/module.prop"
-          sed -i "s/^versionCode=.*/versionCode=${{ github.run_number }}/" "$WORKDIR/module.prop"
-          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-KeepAlive-Magisk-${GITHUB_REF_NAME}.zip" . -x ".*" )
+          sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
+          sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-KeepAlive-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
 
-      - name: Create GitHub Release and upload APK + Magisk module
+      # Systemize 模块内置的占位 APK，用跟 :app 完全相同的正式签名 key 编译，
+      # 保证跟上面这次发布的 APK 签名一致。
+      - name: Build stub release APK (Systemize placeholder)
+        env:
+          CI_VERSION_CODE: ${{ steps.ver.outputs.vcode }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: gradle :stub:assembleRelease --stacktrace --no-daemon
+
+      - name: Package Systemize module (release build, real-signed placeholder)
+        run: |
+          WORKDIR=$(mktemp -d)
+          cp -r systemize-module/. "$WORKDIR/"
+          cp stub/build/outputs/apk/release/*.apk "$WORKDIR/CallerIDModule-stub.apk"
+          sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
+          sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-Systemize-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
+
+      - name: Create GitHub Release and upload APK + both Magisk modules
         uses: softprops/action-gh-release@v2
         with:
           files: |

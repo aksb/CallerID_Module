@@ -1,7 +1,7 @@
 name: Build APK
 
-# 任意分支 push、发 PR，或手动触发，都会跑一遍编译并把 APK 作为
-# workflow 产物（Artifact）上传，在 Actions 运行详情页底部下载
+# 任意分支 push、发 PR，或手动触发，都会跑一遍编译并把 APK/Magisk 模块
+# 作为 workflow 产物（Artifact）上传，在 Actions 运行详情页底部下载
 # （下载 Artifact 需要登录 GitHub 账号，仅用于自己/协作者验证编译是否通过）。
 # 打 v 开头的 tag 走的是另一个 release.yml，会编译 release 包并发布成
 # 公开的 GitHub Release，任何人不登录也能下载，两边不会重复触发。
@@ -10,9 +10,19 @@ name: Build APK
 # （版本号跟 gradle/wrapper/gradle-wrapper.properties 里写的 8.2 保持一致），
 # 不依赖仓库自带 wrapper，效果完全一样。
 #
-# v4.2 新增：每次 push 顺手也打包一下 magisk-module/ 里的 Magisk 保活模块，
-# 方便平时随时验证打包结构对不对，不用等正式打 tag。这里出的是 dev 版本号
-# （commit 短哈希），不是正式发布用的版本号——正式版本号跟随 tag，见 release.yml。
+# v4.3 起：
+#   - 每次 push 会一起打包出 APK、KeepAlive 保活模块、Systemize 系统化模块
+#     三个产物，方便测试的时候一次性拿全（Systemize 是 v4.3 新并入仓库的）。
+#   - 版本号统一从仓库根目录的 version.properties 读取（人读的版本号，
+#     比如 "4.3"，没有格式要求，你想改成什么都行，见该文件里的说明），
+#     三个产物的文件名/module.prop 版本号都跟着这一个文件走，不用分别改。
+#   - Android/Magisk 要求严格递增的 versionCode，不从上面这个人读的版本号
+#     字符串换算（避免 "4.3" 和 "4.21" 谁大谁小的歧义），改成用当次构建的
+#     UTC 时间（精确到分钟数的时间戳）自动生成，天然严格递增，无需人管。
+#   - Systemize 模块内置的"占位 APK"由 :stub 模块编译得到；push 触发的
+#     这个 dev 构建用的是 debug 签名（跟同一次构建出的 APK 一致，足够
+#     用来验证"先装 App/先刷模块顺序随意"这套机制本身），跟正式 Release
+#     签名不是同一把 key，不能跟正式发布的 APK 混用，仅供测试。
 
 on:
   push:
@@ -49,34 +59,70 @@ jobs:
         with:
           gradle-version: '8.2'
 
+      - name: Compute shared version info
+        id: ver
+        run: |
+          VERSION=$(grep '^version=' version.properties | cut -d= -f2)
+          VCODE=$(( $(date -u +%s) / 60 ))
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "vcode=${VCODE}" >> "$GITHUB_OUTPUT"
+          echo "本次构建版本号：${VERSION}，versionCode：${VCODE}"
+
       - name: Build debug APK
+        env:
+          CI_VERSION_CODE: ${{ steps.ver.outputs.vcode }}
         run: gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Rename APK with shared version
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/*.apk "out/CallerIDModule-${{ steps.ver.outputs.version }}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CallerIDModule-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: CallerIDModule-${{ steps.ver.outputs.version }}-apk
+          path: out/CallerIDModule-*.apk
           if-no-files-found: error
 
-      # 每次 push 顺手也打包一下 Magisk 保活模块的 zip，方便平时开发阶段随时
-      # 验证打包对不对，不用等到正式打 tag 才第一次看到打包结果。这里没有 tag
-      # 可用，用 7 位短 commit SHA 当版本号（不是正式 Release 的版本号，只是
-      # 方便区分是哪次 push 出的包）。
-      - name: Package Magisk keep-alive module (dev build)
+      - name: Package Magisk keep-alive module
         run: |
-          SHORT_SHA=$(git rev-parse --short=7 HEAD)
-          MODVER="dev-${SHORT_SHA}"
           WORKDIR=$(mktemp -d)
           cp -r magisk-module/. "$WORKDIR/"
-          sed -i "s/^version=.*/version=v${MODVER}/" "$WORKDIR/module.prop"
-          sed -i "s/^versionCode=.*/versionCode=${{ github.run_number }}/" "$WORKDIR/module.prop"
+          sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
+          sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
           mkdir -p out
-          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-KeepAlive-Magisk-${MODVER}.zip" . -x ".*" )
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-KeepAlive-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
 
-      - name: Upload Magisk module artifact (dev build)
+      - name: Upload Magisk keep-alive module artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CallerIDModule-KeepAlive-Magisk-dev
+          name: CallerIDModule-KeepAlive-Magisk-${{ steps.ver.outputs.version }}
           path: out/CallerIDModule-KeepAlive-Magisk-*.zip
+          if-no-files-found: error
+
+      # Systemize 模块内置的占位 APK，这里用 debug 签名编译——跟上面同一次
+      # 构建出的 APK 是同一把 debug key，两者签名一致，足够验证"先装 App/
+      # 先刷模块顺序随意"这套机制；但跟正式 Release 签名不是同一把 key，
+      # 不能拿这里产出的模块去配官方 Release 页面下载的 APK。
+      - name: Build stub debug APK (Systemize placeholder)
+        env:
+          CI_VERSION_CODE: ${{ steps.ver.outputs.vcode }}
+        run: gradle :stub:assembleDebug --stacktrace --no-daemon
+
+      - name: Package Systemize module (dev build, debug-signed placeholder)
+        run: |
+          WORKDIR=$(mktemp -d)
+          cp -r systemize-module/. "$WORKDIR/"
+          cp stub/build/outputs/apk/debug/*.apk "$WORKDIR/CallerIDModule-stub.apk"
+          sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
+          sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
+          mkdir -p out
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-Systemize-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
+
+      - name: Upload Systemize module artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CallerIDModule-Systemize-Magisk-${{ steps.ver.outputs.version }}
+          path: out/CallerIDModule-Systemize-Magisk-*.zip
           if-no-files-found: error

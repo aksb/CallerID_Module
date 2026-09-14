@@ -1340,7 +1340,8 @@ public class MainActivity extends Activity {
               + "① ADB 命令（电脑 + 数据线，不需要设备 root）\n"
               + "② 手机本地终端，如 Termux / MT管理器（需要设备已 root）\n"
               + "③ Magisk 保活模块的 Action 按钮（需要设备已 root、装了配套 Magisk 模块，"
-              + "不用重启手机，一下就能重新执行一次）",
+              + "不用重启手机就能重新执行一次；注意这个按钮要刷入模块并重启过一次之后才会"
+              + "出现，这是 Magisk 本身的机制，首次刷入还没重启时看不到属于正常现象）",
                 12, 0xFF44CC44), 8);
 
         Button btnKeepAliveNoRoot = btn("🔋 申请忽略电池优化（无需 Root）", 0xFF1565C0);
@@ -1361,34 +1362,29 @@ public class MainActivity extends Activity {
         });
 
         add(boardRootKeepAlive, title(
-                "以下命令可直接长按选中复制。不会对系统造成影响，不用了正常卸载本 App 即可，"
-              + "无需额外操作。\n\n"
+                "以下命令可直接长按选中复制。每条命令都设计成\"设置 + 判断 + 直接给中文结果\"，"
+              + "一条对应一行，不会跑完看不出有没有生效，也不用再额外跑一遍验证命令去肉眼比对"
+              + "英文输出。不会对系统造成影响，不用了正常卸载本 App 即可，无需额外操作。\n\n"
               + "① ADB 命令（电脑上敲，手机数据线连接电脑，不需要设备本身 root）：\n\n"
-              + "  adb shell cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow\n"
-              + "  adb shell cmd appops set com.callerid.module RUN_IN_BACKGROUND allow\n"
-              + "  adb shell cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow\n"
-              + "  adb shell dumpsys deviceidle whitelist +com.callerid.module\n"
-              + "  adb shell am set-inactive com.callerid.module false\n\n"
+              + "adb shell 'cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo \"悬浮窗权限：已启用 ✔\" || echo \"悬浮窗权限：未启用 ✘\"'\n\n"
+              + "adb shell 'cmd appops set com.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo \"后台运行权限：已启用 ✔\" || echo \"后台运行权限：未启用 ✘\"'\n\n"
+              + "adb shell 'cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo \"任意后台运行权限：已启用 ✔\" || echo \"任意后台运行权限：未启用 ✘\"'\n\n"
+              + "adb shell 'dumpsys deviceidle whitelist +com.callerid.module; dumpsys deviceidle whitelist | grep -q com.callerid.module && echo \"电池优化白名单：已启用 ✔\" || echo \"电池优化白名单：未启用 ✘\"'\n\n"
+              + "adb shell 'am set-inactive com.callerid.module false; am get-inactive com.callerid.module | grep -q \"Idle=false\" && echo \"待机分桶限制：已解除 ✔\" || echo \"待机分桶限制：未解除 ✘\"'\n\n"
               + "② 手机本地终端命令（Termux / MT管理器等，需要设备已 root）：\n"
-              + "先输入 su 回车，授权 root 权限，窗口出现 # 标识后，再依次输入：\n\n"
-              + "cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow\n"
-              + "cmd appops set com.callerid.module RUN_IN_BACKGROUND allow\n"
-              + "cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow\n"
-              + "dumpsys deviceidle whitelist +com.callerid.module\n"
-              + "am set-inactive com.callerid.module false\n\n"
+              + "先输入 su 回车，授权 root 权限，窗口出现 # 标识后，再逐条整行复制粘贴执行"
+              + "（一条一行，不要把多行一起粘贴，部分终端粘贴多行命令有时会出错）：\n\n"
+              + "cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo \"悬浮窗权限：已启用 ✔\" || echo \"悬浮窗权限：未启用 ✘\"\n\n"
+              + "cmd appops set com.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo \"后台运行权限：已启用 ✔\" || echo \"后台运行权限：未启用 ✘\"\n\n"
+              + "cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo \"任意后台运行权限：已启用 ✔\" || echo \"任意后台运行权限：未启用 ✘\"\n\n"
+              + "dumpsys deviceidle whitelist +com.callerid.module; dumpsys deviceidle whitelist | grep -q com.callerid.module && echo \"电池优化白名单：已启用 ✔\" || echo \"电池优化白名单：未启用 ✘\"\n\n"
+              + "am set-inactive com.callerid.module false; am get-inactive com.callerid.module | grep -q \"Idle=false\" && echo \"待机分桶限制：已解除 ✔\" || echo \"待机分桶限制：未解除 ✘\"\n\n"
               + "③ Magisk 保活模块：装好配套的 Magisk 模块后（模块本身不含 APK，只要装了这个"
               + "包名的 App 就自动生效），在 Magisk App 里找到这个模块，点它的 Action 按钮，"
-              + "就是立即执行一次上面这五条命令，不用重启手机；也可以什么都不点，模块本身开机时"
-              + "会自动执行一次。\n\n"
-              + "验证命令是否生效（在①②任一种终端环境里执行，纯读取，不会改任何东西）：\n\n"
-              + "cmd appops get com.callerid.module RUN_IN_BACKGROUND\n"
-              + "cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND\n"
-              + "dumpsys deviceidle whitelist | grep com.callerid.module\n"
-              + "am get-inactive com.callerid.module\n\n"
-              + "前两条正常应该输出包含 allow 字样；第三条能搜到 com.callerid.module 这一行"
-              + "说明已经在白名单里（搜不到说明命令没生效或者还没执行过）；第四条正常应该输出"
-              + "Idle=false。如果哪一条对不上，可以把完整输出发给 AI 帮忙看看是不是命令在你这台"
-              + "设备上语法/权限有差异。",
+              + "就是立即执行一次上面这五项、并直接用中文显示每一项结果，不用重启手机；也可以"
+              + "什么都不点，模块本身开机时会自动执行一次（同样会把结果记进模块目录下的日志）。"
+              + "注意：这个 Action 按钮要刷入模块并重启过一次之后才会出现，是 Magisk 本身的"
+              + "机制，首次刷入还没重启时看不到属于正常现象，不是模块有问题。",
                 12, 0xFF777777), 8);
 
         // ── 关于本软件（v3.20 新增，v3.20-2 补全真实地址，v3.21 标题居中+整体下移+新增更新地址） ──
