@@ -54,6 +54,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Google 在 2026-09-14 前后把已淘汰多年的 'tools' 包从 SDK 仓库彻底
+          # 下架了，这个 action 默认会尝试装 'tools platform-tools'，装不到
+          # 'tools' 就直接报错退出，导致整个 job 还没轮到我们自己的构建步骤就
+          # 失败。这里传空字符串跳过它自己的默认安装（只借用它把 ANDROID_HOME/
+          # 证书协议这些环境准备好），实际需要的包由下面这一步显式指定安装。
+          packages: ''
 
       - name: Install Android SDK platform & build-tools
         run: |
