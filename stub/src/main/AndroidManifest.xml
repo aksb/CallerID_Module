@@ -8,14 +8,16 @@
         体验问题——真正的 App 装上去之前，它在系统里就是完全不可见、
         不可交互的一个空壳。
 
-        android:persistent="true" 跟 :app 里加的那一条保持一致，配合下面
-        systemize-module 把它装进 /system/priv-app 才会真正生效。
+        v4.3 起不再声明 android:persistent="true"（原因见 :app 那边
+        AndroidManifest.xml 里的说明——persistent 状态下的包名会被系统禁止
+        `pm install` 更新，跟这个模块"顺序无关、随便装随便更新"的设计目标
+        直接冲突，已确认踩到过这个限制，因此去掉）。这里只保留"变成系统
+        应用、拿 priv-app 待遇"这部分效果。
     -->
     <application
         android:label="来电识别"
         android:icon="@android:drawable/ic_menu_call"
         android:allowBackup="false"
-        android:persistent="true"
         android:hasCode="false">
     </application>
 

@@ -39,10 +39,12 @@ v4.3 改成参照 [RecordYou](https://github.com/you-apps/RecordYou-Magisk-Modul
 - 包名跟正式 APK 完全一样（`com.callerid.module`）；
 - 没有任何 Activity，不会出现在桌面上，装了之后、正式 APK 装上去之前，
   它在系统里是完全不可见、不可交互的；
-- 清单里带 `android:persistent="true"`，重启后系统会尽量把这个进程当
-  接近系统核心进程的优先级对待，内存紧张时最后才考虑回收——这就是
-  这个模块要解决的问题：普通安装的 APK 无论怎么设置这个属性都没用，
-  只有系统应用才生效。
+- 变成系统应用后能拿到 priv-app 相关待遇。**v4.3 起不再声明
+  `android:persistent="true"`**——这个属性一旦真正生效，安卓会直接禁止
+  再用 `pm install` 更新这个包名（报错 `Persistent apps are not
+  updateable`），跟这个模块"顺序无关、随便装随便更新"的目标是直接冲突的，
+  实测也确认踩到过这个限制，所以从 v4.3 起去掉，只保留"变成系统应用"
+  这部分效果。
 
 ## 安装
 
