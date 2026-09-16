@@ -1,4 +1,4 @@
-package com.callerid.module;
+package com.aksb2026.callerid.module;
 
 import android.app.Activity;
 import android.app.ActivityManager;
@@ -214,9 +214,9 @@ public class MainActivity extends Activity {
         add(boardPermService, tvServiceStatus, 6);
 
         TextView tvServiceStatusHint = title(
-                "闲置是常见现象（尤其内存较小的机型），不代表来电悬浮窗弹不出来——"
-              + "每次真实来电都会独立重新拉起，不依赖这个常驻状态。不放心的话，"
-              + "用下面「模拟来电测试」直接验证一次就知道准不准。",
+                "如果上面「当前状态」显示闲置，这是常见现象（尤其内存较小的机型），不代表"
+              + "来电悬浮窗弹不出来——每次真实来电都会独立重新拉起，不依赖这个常驻状态。"
+              + "不放心的话，用下面「模拟来电测试」直接验证一次就知道准不准。",
                 11, 0xFF777777);
         add(boardPermService, tvServiceStatusHint, 2);
 
@@ -580,13 +580,16 @@ public class MainActivity extends Activity {
         boardSbLinkage.setOrientation(LinearLayout.VERTICAL);
         addCollapsibleBoard(root, "sb_linkage", "SpamBlocker 联动", boardSbLinkage);
 
-        add(boardSbLinkage, title(
+        LinearLayout boardSbPrinciple = new LinearLayout(this);
+        boardSbPrinciple.setOrientation(LinearLayout.VERTICAL);
+        add(boardSbPrinciple, title(
                 "原理：SpamBlocker 来电时主动向本机发起 HTTP 请求，本模块复用查询链路\n"
               + "（自定义库/缓存/白名单/内置库/联网查询）拿到号码标签，返回给 SpamBlocker\n"
               + "做拦截判断。方向是 SpamBlocker 主动来问，不是本模块主动推送。\n"
               + "需要两边各配置一次：① 下面先启动本地查询服务器；② 复制示例 URL，\n"
               + "去 SpamBlocker「即时查询」新增一条 API，把 URL 填进去即可。",
-                13, 0xFFFF9900), 6);
+                13, 0xFFFF9900), 0);
+        addWarningFold(boardSbLinkage, "sb_linkage_principle", "SpamBlocker拦截原理", boardSbPrinciple, 6);
 
         Button btnSbStart = btn("▶ 启动本地查询服务器", 0xFF2E7D32);
         add(boardSbLinkage, btnSbStart, 10);
@@ -774,6 +777,7 @@ public class MainActivity extends Activity {
         etSbTestNumber.setInputType(InputType.TYPE_CLASS_PHONE);
         etSbTestNumber.setBackgroundColor(0xFF1E1E1E);
         etSbTestNumber.setPadding(dp(12), dp(10), dp(12), dp(10));
+        etSbTestNumber.setText("17896436252"); // v4.5 新增：跟「模拟来电测试」保持一致，默认填入示例号码
         add(boardSbLinkage, etSbTestNumber, 6);
         Button btnSbTest = btn("🧪 发起测试查询", 0xFF00897B);
         add(boardSbLinkage, btnSbTest, 6);
@@ -1271,7 +1275,7 @@ public class MainActivity extends Activity {
         addCollapsibleBoard(root, "backup_import", "备份和导入", boardBackupImport);
         add(boardBackupImport, title(
                 "文件保存路径（可长按复制）：\n"
-              + "/storage/emulated/0/Android/data/com.callerid.module/files/backup\n"
+              + "/storage/emulated/0/Android/data/com.aksb2026.callerid.module/files/backup\n"
               + "其中\n"
               + "query_cache_backup_xxx.json是联网查询号码\n"
               + "custom_numbers_backup_xxx.json是自定义号码\n"
@@ -1330,62 +1334,87 @@ public class MainActivity extends Activity {
         boardRootKeepAlive.setOrientation(LinearLayout.VERTICAL);
         addCollapsibleBoard(root, "root_keepalive", "Root保活教程", boardRootKeepAlive);
 
-        // ── 免 Root 的电池优化申请（v4.0 保留，v4.1 去掉了需要 root 的"一键保活"按钮） ──
-        // 去掉原因：Magisk 的 root 授权是全有或全无的，一旦同意，本 App 拿到的不是
-        // "只能跑这几条命令"的权限，而是任意 root 命令的权限。配套的 Magisk 保活模块
-        // （service.sh / action.sh）压根不用走"授权某个 App root"这条路，效果完全
-        // 一样，不需要把 root 交给这个功能复杂得多的 App，所以把这部分从 App 里去掉了。
+        // ── v4.5 重新设计：①②③➃四个入口按钮 + 弹窗展示具体命令/说明 ──────────
+        // 之前①②③三条命令整段铺在页面上太长了，改成"按钮 + 弹窗"，弹窗里的文字
+        // 沿用 title() 生成，本身就支持长按选中复制，弹窗关闭逻辑复用系统
+        // AlertDialog 自带的"确定"按钮，不需要额外维护展开/收起状态。
+        //
+        // 免 Root 电池优化申请按钮和对应说明文字（v4.0 曾经加过）这次一并去掉：
+        // 这个 App 的定位就是配合 LSPosed（本身要求设备已 root），走到这个教程
+        // 板块的人手上大概率已经有 root，这个"不需要 root"的分支价值不大。
         add(boardRootKeepAlive, title(
-                "下面三种方式效果完全一样（本质上跑的是同一套命令），任选其一，哪个方便用哪个：\n"
-              + "① ADB 命令（电脑 + 数据线，不需要设备 root）\n"
-              + "② 手机本地终端，如 Termux / MT管理器（需要设备已 root）\n"
-              + "③ Magisk 保活模块的 Action 按钮（需要设备已 root、装了配套 Magisk 模块，"
-              + "不用重启手机就能重新执行一次；注意这个按钮要刷入模块并重启过一次之后才会"
-              + "出现，这是 Magisk 本身的机制，首次刷入还没重启时看不到属于正常现象）",
+                "下面①②③三种方式效果完全一样（本质上跑的是同一套命令），任选其一，"
+              + "哪个方便用哪个。\n\n"
+              + "➃是有风险的可选项，如果①/②/③操作后效果不理想再考虑使用：\n\n"
+              + "推荐顺序：①或②操作完成后，如果没有出现掉后台、掉服务现象，就不用"
+              + "后续操作。如果还是有问题，就执行③（因为③每次开机都会执行一次命令）。"
+              + "如果③还是不行，可以考虑➃把本 App 安装成「系统应用」。",
                 12, 0xFF44CC44), 8);
 
-        Button btnKeepAliveNoRoot = btn("🔋 申请忽略电池优化（无需 Root）", 0xFF1565C0);
-        add(boardRootKeepAlive, btnKeepAliveNoRoot, 8);
-        add(boardRootKeepAlive, title(
-                "这一项走系统标准弹窗，不需要 root，能顺手解决三种方式里都要处理的"
-              + "「电池优化白名单」这一条，剩下几条 appops 项还是得用下面 ①②③ 之一。",
-                11, 0xFF777777), 4);
+        final String adbCommands =
+                "ADB 命令（电脑上敲，手机数据线连接电脑，不需要设备本身 root）\n\n"
+              + "共 5 条，可长按复制，逐条整行复制粘贴，每次粘贴后按回车执行都会返回"
+              + "中文结果（一条一行，最好不要复制多条一起粘贴，部分终端粘贴多行命令"
+              + "有时会出错）\n\n"
+              + "以下命令不会对系统造成影响，不用了正常卸载本 App 即可，无需额外操作。\n\n"
+              + "adb shell 'cmd appops set com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo \"悬浮窗权限：已启用 ✔\" || echo \"悬浮窗权限：未启用 ✘\"'\n\n"
+              + "adb shell 'cmd appops set com.aksb2026.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.aksb2026.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo \"后台运行权限：已启用 ✔\" || echo \"后台运行权限：未启用 ✘\"'\n\n"
+              + "adb shell 'cmd appops set com.aksb2026.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.aksb2026.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo \"任意后台运行权限：已启用 ✔\" || echo \"任意后台运行权限：未启用 ✘\"'\n\n"
+              + "adb shell 'dumpsys deviceidle whitelist +com.aksb2026.callerid.module; dumpsys deviceidle whitelist | grep -q com.aksb2026.callerid.module && echo \"电池优化白名单：已启用 ✔\" || echo \"电池优化白名单：未启用 ✘\"'\n\n"
+              + "adb shell 'am set-inactive com.aksb2026.callerid.module false; am get-inactive com.aksb2026.callerid.module | grep -q \"Idle=false\" && echo \"待机分桶限制：已解除 ✔\" || echo \"待机分桶限制：未解除 ✘\"'";
 
-        btnKeepAliveNoRoot.setOnClickListener(v -> {
-            try {
-                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                intent.setData(Uri.parse("package:" + getPackageName()));
-                startActivity(intent);
-            } catch (Exception e) {
-                toast("无法打开系统电池优化设置：" + e);
-            }
-        });
+        final String localCommands =
+                "在 Termux / MT管理器等终端里\n\n"
+              + "先输入 su 回车，授权 root 权限，窗口出现 # 标识后，\n\n"
+              + "逐条整行复制粘贴，共 5 条，可长按复制，每次粘贴后按回车执行都会返回"
+              + "中文结果（一条一行，最好不要把多行一起粘贴，部分终端粘贴多行命令"
+              + "有时会出错）\n\n"
+              + "以下命令不会对系统造成影响，不用了正常卸载本 App 即可，无需额外操作。\n\n"
+              + "cmd appops set com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo \"悬浮窗权限：已启用 ✔\" || echo \"悬浮窗权限：未启用 ✘\"\n\n"
+              + "cmd appops set com.aksb2026.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.aksb2026.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo \"后台运行权限：已启用 ✔\" || echo \"后台运行权限：未启用 ✘\"\n\n"
+              + "cmd appops set com.aksb2026.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.aksb2026.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo \"任意后台运行权限：已启用 ✔\" || echo \"任意后台运行权限：未启用 ✘\"\n\n"
+              + "dumpsys deviceidle whitelist +com.aksb2026.callerid.module; dumpsys deviceidle whitelist | grep -q com.aksb2026.callerid.module && echo \"电池优化白名单：已启用 ✔\" || echo \"电池优化白名单：未启用 ✘\"\n\n"
+              + "am set-inactive com.aksb2026.callerid.module false; am get-inactive com.aksb2026.callerid.module | grep -q \"Idle=false\" && echo \"待机分桶限制：已解除 ✔\" || echo \"待机分桶限制：未解除 ✘\"";
 
-        add(boardRootKeepAlive, title(
-                "以下命令可直接长按选中复制。每条命令都设计成\"设置 + 判断 + 直接给中文结果\"，"
-              + "一条对应一行，不会跑完看不出有没有生效，也不用再额外跑一遍验证命令去肉眼比对"
-              + "英文输出。不会对系统造成影响，不用了正常卸载本 App 即可，无需额外操作。\n\n"
-              + "① ADB 命令（电脑上敲，手机数据线连接电脑，不需要设备本身 root）：\n\n"
-              + "adb shell 'cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo \"悬浮窗权限：已启用 ✔\" || echo \"悬浮窗权限：未启用 ✘\"'\n\n"
-              + "adb shell 'cmd appops set com.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo \"后台运行权限：已启用 ✔\" || echo \"后台运行权限：未启用 ✘\"'\n\n"
-              + "adb shell 'cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo \"任意后台运行权限：已启用 ✔\" || echo \"任意后台运行权限：未启用 ✘\"'\n\n"
-              + "adb shell 'dumpsys deviceidle whitelist +com.callerid.module; dumpsys deviceidle whitelist | grep -q com.callerid.module && echo \"电池优化白名单：已启用 ✔\" || echo \"电池优化白名单：未启用 ✘\"'\n\n"
-              + "adb shell 'am set-inactive com.callerid.module false; am get-inactive com.callerid.module | grep -q \"Idle=false\" && echo \"待机分桶限制：已解除 ✔\" || echo \"待机分桶限制：未解除 ✘\"'\n\n"
-              + "② 手机本地终端命令（Termux / MT管理器等，需要设备已 root）：\n"
-              + "先输入 su 回车，授权 root 权限，窗口出现 # 标识后，再逐条整行复制粘贴执行"
-              + "（一条一行，不要把多行一起粘贴，部分终端粘贴多行命令有时会出错）：\n\n"
-              + "cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo \"悬浮窗权限：已启用 ✔\" || echo \"悬浮窗权限：未启用 ✘\"\n\n"
-              + "cmd appops set com.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo \"后台运行权限：已启用 ✔\" || echo \"后台运行权限：未启用 ✘\"\n\n"
-              + "cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo \"任意后台运行权限：已启用 ✔\" || echo \"任意后台运行权限：未启用 ✘\"\n\n"
-              + "dumpsys deviceidle whitelist +com.callerid.module; dumpsys deviceidle whitelist | grep -q com.callerid.module && echo \"电池优化白名单：已启用 ✔\" || echo \"电池优化白名单：未启用 ✘\"\n\n"
-              + "am set-inactive com.callerid.module false; am get-inactive com.callerid.module | grep -q \"Idle=false\" && echo \"待机分桶限制：已解除 ✔\" || echo \"待机分桶限制：未解除 ✘\"\n\n"
-              + "③ Magisk 保活模块：装好配套的 Magisk 模块后（模块本身不含 APK，只要装了这个"
-              + "包名的 App 就自动生效），在 Magisk App 里找到这个模块，点它的 Action 按钮，"
-              + "就是立即执行一次上面这五项、并直接用中文显示每一项结果，不用重启手机；也可以"
-              + "什么都不点，模块本身开机时会自动执行一次（同样会把结果记进模块目录下的日志）。"
+        final String keepAliveModuleInfo =
+                "KeepAlive-Magisk 保活模块本身不含 APK，只要装了这个包名的 App 就自动生效。\n\n"
+              + "安装好模块后重启手机，在 Magisk App 里找到这个模块，点它的 Action 按钮，"
+              + "就是立即执行一次「② 本地终端命令」里的五项、并直接用中文显示每一项结果，"
+              + "执行后不用重启手机；也可以什么都不做，模块本身开机时会自动执行一次"
+              + "（同样会把结果记进模块目录下的日志）。\n\n"
               + "注意：这个 Action 按钮要刷入模块并重启过一次之后才会出现，是 Magisk 本身的"
-              + "机制，首次刷入还没重启时看不到属于正常现象，不是模块有问题。",
-                12, 0xFF777777), 8);
+              + "机制，首次刷入还没重启时看不到属于正常现象，不是模块有问题。";
+
+        final String systemizeModuleInfo =
+                "这个模块包含一个空的 APK 文件，用来把本「来电识别」App 安装成「系统应用」，"
+              + "具体能带来多少额外的抗杀效果目前没有实测数据（理论上可能有点用）。\n\n"
+              + "使用方法：\n"
+              + "刷入这个模块后重启一次，再安装本「来电识别」APK 覆盖即可。\n"
+              + "（如果顺序反过来，先安装 APK、再刷 Systemize-Magisk 模块，刷完同样需要"
+              + "重启一次，也可以，没有影响）\n\n"
+              + "如果前面的①/②/③操作已经能稳定使用，不建议再刷这个模块。\n\n"
+              + "注意：如果要自己使用源码编译的话，占位 APK 和正式 APK 必须同一套签名。\n\n"
+              + "免责声明：\n"
+              + "这个模块会修改你的系统文件。请自行承担风险。开发者不对使用该模块所造成的"
+              + "任何损害负责。";
+
+        Button btnShowAdb = btn("① ADB 命令（点击查看）", 0xFF1565C0);
+        add(boardRootKeepAlive, btnShowAdb, 10);
+        btnShowAdb.setOnClickListener(v -> showInfoDialog("① ADB 命令", adbCommands));
+
+        Button btnShowLocal = btn("② 本地终端命令，需 root（点击查看）", 0xFF1565C0);
+        add(boardRootKeepAlive, btnShowLocal, 6);
+        btnShowLocal.setOnClickListener(v -> showInfoDialog("② 本地终端命令", localCommands));
+
+        Button btnShowKeepAliveModule = btn("③ KeepAlive-Magisk 保活模块（点击查看）", 0xFF1565C0);
+        add(boardRootKeepAlive, btnShowKeepAliveModule, 6);
+        btnShowKeepAliveModule.setOnClickListener(v ->
+                showInfoDialog("③ KeepAlive-Magisk 保活模块", keepAliveModuleInfo));
+
+        Button btnShowSystemizeModule = btn("➃ Systemize-Magisk 模块（可选，有风险）", 0xFFB71C1C);
+        add(boardRootKeepAlive, btnShowSystemizeModule, 6);
+        btnShowSystemizeModule.setOnClickListener(v ->
+                showInfoDialog("➃ Systemize-Magisk 模块（可选，有风险）", systemizeModuleInfo));
 
         // ── 关于本软件（v3.20 新增，v3.20-2 补全真实地址，v3.21 标题居中+整体下移+新增更新地址） ──
         // 不参与折叠，永远展开、标题和正文都居中；四条地址（项目主页/更新地址/
@@ -2145,6 +2174,23 @@ public class MainActivity extends Activity {
         tv.setLineSpacing(0, 1.4f);
         tv.setTextIsSelectable(true);
         return tv;
+    }
+
+    /**
+     * v4.5 新增："Root保活教程"①②③➃四个入口用的弹窗——标题 + 可长按选中复制的
+     * 正文 + 一个"确定"按钮。正文用 title() 生成（本身就支持长按选中），外面套一层
+     * ScrollView 防止内容超长时对话框顶到屏幕外。
+     */
+    private void showInfoDialog(String dialogTitle, String message) {
+        TextView tv = title(message, 13, 0xFFCCCCCC);
+        tv.setPadding(dp(20), dp(16), dp(20), dp(16));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this)
+                .setTitle(dialogTitle)
+                .setView(sv)
+                .setPositiveButton("确定", null)
+                .show();
     }
 
     /**

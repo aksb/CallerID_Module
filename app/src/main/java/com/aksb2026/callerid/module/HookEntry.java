@@ -1,4 +1,4 @@
-package com.callerid.module;
+package com.aksb2026.callerid.module;
 
 import android.content.Context;
 import android.content.Intent;
@@ -89,14 +89,14 @@ public class HookEntry implements IXposedHookLoadPackage {
         if (state == TelephonyManager.CALL_STATE_RINGING
                 && number != null && !number.isEmpty()) {
             Intent i = new Intent("com.callerid.ACTION_INCOMING");
-            i.setPackage("com.callerid.module"); // 只发给自己，安全
+            i.setPackage("com.aksb2026.callerid.module"); // 只发给自己，安全
             i.putExtra("number", number);
             ctx.sendBroadcast(i);
             XposedBridge.log(TAG + ": RINGING " + number);
 
         } else if (state == TelephonyManager.CALL_STATE_IDLE) {
             Intent i = new Intent("com.callerid.ACTION_IDLE");
-            i.setPackage("com.callerid.module");
+            i.setPackage("com.aksb2026.callerid.module");
             ctx.sendBroadcast(i);
             XposedBridge.log(TAG + ": IDLE");
         }

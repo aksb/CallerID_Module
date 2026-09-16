@@ -1,20 +1,20 @@
-# CallerIDModule 保活助手（Magisk 模块）
+# Aksb2026CallerID 保活助手（Magisk 模块）
 
 不含任何 APK，纯脚本模块。参考 RecordYou 的思路，但反过来设计：
-**装了「来电识别」(`com.callerid.module`) 这个包名的 App，这个模块才生效；
+**装了「来电识别」(`com.aksb2026.callerid.module`) 这个包名的 App，这个模块才生效；
 不装这个 App、或者卸载了这个 App，模块本身什么都不做，不会有任何副作用。**
 
 ## 这个模块做了什么
 
-开机（`service.sh`，late_start service 阶段）时检测 `com.callerid.module`
+开机（`service.sh`，late_start service 阶段）时检测 `com.aksb2026.callerid.module`
 是否已安装，是的话执行：
 
 ```
-cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow
-cmd appops set com.callerid.module RUN_IN_BACKGROUND allow
-cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow
-dumpsys deviceidle whitelist +com.callerid.module
-am set-inactive com.callerid.module false
+cmd appops set com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW allow
+cmd appops set com.aksb2026.callerid.module RUN_IN_BACKGROUND allow
+cmd appops set com.aksb2026.callerid.module RUN_ANY_IN_BACKGROUND allow
+dumpsys deviceidle whitelist +com.aksb2026.callerid.module
+am set-inactive com.aksb2026.callerid.module false
 ```
 
 这套命令和 App 里"Root保活教程"板块列出的 ADB 命令、手机本地终端（Termux 等）
@@ -35,17 +35,17 @@ Termux / ADB shell 里手动跑一遍确认，下面每条都是"设置 + 判断
 Termux 粘贴多行命令有时候会出错的问题）：
 
 ```
-cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo "悬浮窗权限：已启用 ✔" || echo "悬浮窗权限：未启用 ✘"
-cmd appops set com.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo "后台运行权限：已启用 ✔" || echo "后台运行权限：未启用 ✘"
-cmd appops set com.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo "任意后台运行权限：已启用 ✔" || echo "任意后台运行权限：未启用 ✘"
-dumpsys deviceidle whitelist +com.callerid.module; dumpsys deviceidle whitelist | grep -q com.callerid.module && echo "电池优化白名单：已启用 ✔" || echo "电池优化白名单：未启用 ✘"
-am set-inactive com.callerid.module false; am get-inactive com.callerid.module | grep -q "Idle=false" && echo "待机分桶限制：已解除 ✔" || echo "待机分桶限制：未解除 ✘"
+cmd appops set com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo "悬浮窗权限：已启用 ✔" || echo "悬浮窗权限：未启用 ✘"
+cmd appops set com.aksb2026.callerid.module RUN_IN_BACKGROUND allow; cmd appops get com.aksb2026.callerid.module RUN_IN_BACKGROUND | grep -q allow && echo "后台运行权限：已启用 ✔" || echo "后台运行权限：未启用 ✘"
+cmd appops set com.aksb2026.callerid.module RUN_ANY_IN_BACKGROUND allow; cmd appops get com.aksb2026.callerid.module RUN_ANY_IN_BACKGROUND | grep -q allow && echo "任意后台运行权限：已启用 ✔" || echo "任意后台运行权限：未启用 ✘"
+dumpsys deviceidle whitelist +com.aksb2026.callerid.module; dumpsys deviceidle whitelist | grep -q com.aksb2026.callerid.module && echo "电池优化白名单：已启用 ✔" || echo "电池优化白名单：未启用 ✘"
+am set-inactive com.aksb2026.callerid.module false; am get-inactive com.aksb2026.callerid.module | grep -q "Idle=false" && echo "待机分桶限制：已解除 ✔" || echo "待机分桶限制：未解除 ✘"
 ```
 
 需要用 adb 从电脑上敲的话，整条包一层引号即可，例如：
 
 ```
-adb shell 'cmd appops set com.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo "悬浮窗权限：已启用 ✔" || echo "悬浮窗权限：未启用 ✘"'
+adb shell 'cmd appops set com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW allow; cmd appops get com.aksb2026.callerid.module SYSTEM_ALERT_WINDOW | grep -q allow && echo "悬浮窗权限：已启用 ✔" || echo "悬浮窗权限：未启用 ✘"'
 ```
 
 ## 安装
@@ -71,7 +71,7 @@ Magisk App 里这个模块条目会有一个 **Action** 按钮，点一下就用
 ## 卸载
 
 Magisk App 里正常移除这个模块、重启即可。卸载时会跑一次 `uninstall.sh`，
-只把 `com.callerid.module` 从 deviceidle 白名单里撤出来（appops 的
+只把 `com.aksb2026.callerid.module` 从 deviceidle 白名单里撤出来（appops 的
 allow 状态刻意不撤销，避免撤销瞬间正在使用中的 App 突然被系统限制这种
 意料之外的副作用）。卸载模块**不会**卸载/影响「来电识别」这个 App 本身。
 

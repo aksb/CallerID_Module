@@ -1,6 +1,6 @@
 id=callerid_systemize
-name=CallerIDModule 系统化增强（可选，风险自负）
+name=Aksb2026CallerID 系统化增强（可选，风险自负）
 version=v4.3
 versionCode=1
 author=aksb，创意来自 RecordYou（https://github.com/you-apps/RecordYou-Magisk-Module）
-description=可选的增强模块，跟保活脚本模块（callerid_keepalive）完全独立，装不装、先后顺序都互不影响。作用：把「来电识别」(com.callerid.module) 变成系统应用，拿到 priv-app 相关待遇。用的是内置占位 APK（跟正式发布的 APK 同一套签名）的方案，不要求"先装 App 再刷模块"这个安装顺序，也不需要"现场卸载已装版本"这一步——旧版 v1.0 那一步在实测中会导致图标丢失、App 闪退、且后续无法覆盖安装，本版本已改用这套更稳妥的方案。v4.3 起不再包含 android:persistent="true"（这个属性一旦真正生效，会导致系统禁止再用 pm install 更新这个包名，跟本模块的设计目标冲突，已在实测中确认并去掉）。
+description=可选的增强模块，跟保活脚本模块（callerid_keepalive）完全独立，装不装、先后顺序都互不影响。作用：把「来电识别」(com.aksb2026.callerid.module) 变成系统应用，拿到 priv-app 相关待遇。用的是内置占位 APK（跟正式发布的 APK 同一套签名）的方案，不要求"先装 App 再刷模块"这个安装顺序，也不需要"现场卸载已装版本"这一步——旧版 v1.0 那一步在实测中会导致图标丢失、App 闪退、且后续无法覆盖安装，本版本已改用这套更稳妥的方案。v4.3 起不再包含 android:persistent="true"（这个属性一旦真正生效，会导致系统禁止再用 pm install 更新这个包名，跟本模块的设计目标冲突，已在实测中确认并去掉）。

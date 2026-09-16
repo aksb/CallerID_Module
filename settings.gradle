@@ -18,7 +18,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CallerIDModule"
+rootProject.name = "Aksb2026CallerID"
 include ':app'
 // 系统化增强 Magisk 模块用的"占位 APK"——包名跟 :app 完全一样，但没有任何
 // 真实功能、也没有桌面图标（不声明 LAUNCHER），必须用跟 :app 完全相同的

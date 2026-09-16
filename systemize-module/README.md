@@ -1,4 +1,4 @@
-# CallerIDModule 系统化增强（可选，风险自负）v4.3
+# Aksb2026CallerID 系统化增强（可选，风险自负）v4.3
 
 和保活脚本模块（`callerid_keepalive`）完全独立的另一个模块，两个装不装、
 先后顺序都互不影响。
@@ -33,10 +33,10 @@ v4.3 改成参照 [RecordYou](https://github.com/you-apps/RecordYou-Magisk-Modul
 
 ## 这个模块做了什么
 
-`customize.sh` 把模块内置的占位 APK 复制到 `/system/priv-app/CallerIDModule/`，
+`customize.sh` 把模块内置的占位 APK 复制到 `/system/priv-app/Aksb2026CallerID/`，
 仅此而已，不涉及任何 `pm install`/`pm uninstall` 操作。占位 APK 本身：
 
-- 包名跟正式 APK 完全一样（`com.callerid.module`）；
+- 包名跟正式 APK 完全一样（`com.aksb2026.callerid.module`）；
 - 没有任何 Activity，不会出现在桌面上，装了之后、正式 APK 装上去之前，
   它在系统里是完全不可见、不可交互的；
 - 变成系统应用后能拿到 priv-app 相关待遇。**v4.3 起不再声明
@@ -60,10 +60,8 @@ v4.3 改成参照 [RecordYou](https://github.com/you-apps/RecordYou-Magisk-Modul
 刷完重启后如果 App 打不开、提示安装包无效等异常：
 
 1. Magisk App 里移除这个模块，重启；
-2. `adb shell pm uninstall com.callerid.module`（**不带** `-k`，彻底清干净）；
-3. 重新正常安装正式 APK，确认恢复正常；
-4. 把详细现象（尤其是 `adb shell dumpsys package com.callerid.module`
-   的完整输出）反馈给开发者，帮忙定位是不是签名不一致或者别的原因。
+2. `adb shell pm uninstall com.aksb2026.callerid.module`（**不带** `-k`，彻底清干净）；
+3. 重新正常安装正式 APK，确认恢复正常即可。
 
 ## 卸载
 

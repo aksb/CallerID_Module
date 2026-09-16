@@ -1,6 +1,6 @@
 // 系统化增强 Magisk 模块用的"占位 APK"。
 //
-// 这个模块编出来的 APK 跟 :app **包名完全一样**（com.callerid.module），
+// 这个模块编出来的 APK 跟 :app **包名完全一样**（com.aksb2026.callerid.module），
 // 但没有任何真实功能、没有 Activity、不声明 LAUNCHER（不会出现在桌面，
 // 避免真正的 App 还没装时用户点到它然后闪退）。它的唯一作用是被
 // systemize-module 这个 Magisk 模块打包进去、刷到 /system/priv-app 里占位。
@@ -17,11 +17,11 @@ plugins {
 }
 
 android {
-    namespace 'com.callerid.module.stub'
+    namespace 'com.aksb2026.callerid.module.stub'
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.callerid.module"
+        applicationId "com.aksb2026.callerid.module"
         minSdk 28
         targetSdk 35
         // 故意写死成一个极低的值，且以后永远不变。:app 的 versionCode 由

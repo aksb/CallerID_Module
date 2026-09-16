@@ -21,11 +21,11 @@ def envVersionCode = System.getenv("CI_VERSION_CODE")
 def appVersionCode = envVersionCode != null ? envVersionCode.toInteger() : 1
 
 android {
-    namespace 'com.callerid.module'
+    namespace 'com.aksb2026.callerid.module'
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.callerid.module"
+        applicationId "com.aksb2026.callerid.module"
         minSdk 28
         targetSdk 35
         versionCode appVersionCode

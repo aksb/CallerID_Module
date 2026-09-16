@@ -83,13 +83,13 @@ jobs:
       - name: Rename APK with shared version
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/*.apk "out/CallerIDModule-${{ steps.ver.outputs.version }}.apk"
+          cp app/build/outputs/apk/debug/*.apk "out/Aksb2026CallerID-${{ steps.ver.outputs.version }}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CallerIDModule-${{ steps.ver.outputs.version }}-apk
-          path: out/CallerIDModule-*.apk
+          name: Aksb2026CallerID-${{ steps.ver.outputs.version }}-apk
+          path: out/Aksb2026CallerID-*.apk
           if-no-files-found: error
 
       - name: Package Magisk keep-alive module
@@ -99,13 +99,13 @@ jobs:
           sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
           sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
           mkdir -p out
-          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-KeepAlive-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/Aksb2026CallerID-KeepAlive-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
 
       - name: Upload Magisk keep-alive module artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CallerIDModule-KeepAlive-Magisk-${{ steps.ver.outputs.version }}
-          path: out/CallerIDModule-KeepAlive-Magisk-*.zip
+          name: Aksb2026CallerID-KeepAlive-Magisk-${{ steps.ver.outputs.version }}
+          path: out/Aksb2026CallerID-KeepAlive-Magisk-*.zip
           if-no-files-found: error
 
       # Systemize 模块内置的占位 APK，这里用 debug 签名编译——跟上面同一次
@@ -121,15 +121,15 @@ jobs:
         run: |
           WORKDIR=$(mktemp -d)
           cp -r systemize-module/. "$WORKDIR/"
-          cp stub/build/outputs/apk/debug/*.apk "$WORKDIR/CallerIDModule-stub.apk"
+          cp stub/build/outputs/apk/debug/*.apk "$WORKDIR/Aksb2026CallerID-stub.apk"
           sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
           sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
           mkdir -p out
-          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-Systemize-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/Aksb2026CallerID-Systemize-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
 
       - name: Upload Systemize module artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CallerIDModule-Systemize-Magisk-${{ steps.ver.outputs.version }}
-          path: out/CallerIDModule-Systemize-Magisk-*.zip
+          name: Aksb2026CallerID-Systemize-Magisk-${{ steps.ver.outputs.version }}
+          path: out/Aksb2026CallerID-Systemize-Magisk-*.zip
           if-no-files-found: error

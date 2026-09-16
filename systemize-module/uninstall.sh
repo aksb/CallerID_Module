@@ -11,9 +11,9 @@
 # 把整个安装记录一起清掉，这个具体行为跟安卓版本/ROM 有关，我们没有把握
 # 打包票，所以这里只留一份提示，不替你做决定。
 
-echo "CallerIDModule 系统化增强模块已被移除。" > /data/local/tmp/callerid_systemize_uninstalled.txt
+echo "Aksb2026CallerID 系统化增强模块已被移除。" > /data/local/tmp/callerid_systemize_uninstalled.txt
 echo "重启后请检查「来电识别」App 是否还能正常打开。" >> /data/local/tmp/callerid_systemize_uninstalled.txt
-echo "如果打不开或者从桌面消失了，用 adb shell pm uninstall com.callerid.module" >> /data/local/tmp/callerid_systemize_uninstalled.txt
+echo "如果打不开或者从桌面消失了，用 adb shell pm uninstall com.aksb2026.callerid.module" >> /data/local/tmp/callerid_systemize_uninstalled.txt
 echo "彻底清一遍，再重新安装一遍正式 APK 即可恢复。" >> /data/local/tmp/callerid_systemize_uninstalled.txt
 echo "App 数据（设置/SpamBlocker联动配置等）是否会一并被清掉，取决于具体" >> /data/local/tmp/callerid_systemize_uninstalled.txt
 echo "安卓版本的包管理清理逻辑，如果丢了，重新配置一遍即可，不是什么大问题。" >> /data/local/tmp/callerid_systemize_uninstalled.txt

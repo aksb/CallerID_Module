@@ -1,4 +1,4 @@
-package com.callerid.module;
+package com.aksb2026.callerid.module;
 
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -10,7 +10,7 @@ import android.provider.Settings;
  *
  * v4.0 曾经加过一个"一键保活"按钮，需要 App 自己申请 root 才能执行
  * `cmd appops set ...` 这类命令。但仔细想清楚后发现：Magisk 的 root 授权是
- * 全有或全无的，一旦同意，CallerIDModule 拿到的不是"只能跑那几条命令"的权限，
+ * 全有或全无的，一旦同意，Aksb2026CallerID 拿到的不是"只能跑那几条命令"的权限，
  * 而是任意 root 命令的权限——授权机制本身不看这个 App 打算拿 root 干嘛。
  * 相比之下，配套的 Magisk 保活模块（service.sh / action.sh）压根不用走
  * "授权某个 App root"这条路，脚本本身就跑在 Magisk 自己的可信执行环境里，

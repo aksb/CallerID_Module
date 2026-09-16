@@ -97,7 +97,7 @@ jobs:
       - name: Rename APK with shared version
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/*.apk "out/CallerIDModule-${{ steps.ver.outputs.version }}.apk"
+          cp app/build/outputs/apk/release/*.apk "out/Aksb2026CallerID-${{ steps.ver.outputs.version }}.apk"
 
       - name: Package Magisk keep-alive module
         run: |
@@ -105,7 +105,7 @@ jobs:
           cp -r magisk-module/. "$WORKDIR/"
           sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
           sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
-          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-KeepAlive-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/Aksb2026CallerID-KeepAlive-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
 
       # Systemize 模块内置的占位 APK，用跟 :app 完全相同的正式签名 key 编译，
       # 保证跟上面这次发布的 APK 签名一致。
@@ -121,10 +121,10 @@ jobs:
         run: |
           WORKDIR=$(mktemp -d)
           cp -r systemize-module/. "$WORKDIR/"
-          cp stub/build/outputs/apk/release/*.apk "$WORKDIR/CallerIDModule-stub.apk"
+          cp stub/build/outputs/apk/release/*.apk "$WORKDIR/Aksb2026CallerID-stub.apk"
           sed -i "s/^version=.*/version=v${{ steps.ver.outputs.version }}/" "$WORKDIR/module.prop"
           sed -i "s/^versionCode=.*/versionCode=${{ steps.ver.outputs.vcode }}/" "$WORKDIR/module.prop"
-          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/CallerIDModule-Systemize-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
+          ( cd "$WORKDIR" && zip -rq "$GITHUB_WORKSPACE/out/Aksb2026CallerID-Systemize-Magisk-${{ steps.ver.outputs.version }}.zip" . -x ".*" )
 
       - name: Create GitHub Release and upload APK + both Magisk modules
         uses: softprops/action-gh-release@v2

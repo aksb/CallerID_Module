@@ -1,6 +1,6 @@
 #!/system/bin/sh
 ##########################################################
-# CallerIDModule 系统化增强 - customize.sh（v4.3 重写版）
+# Aksb2026CallerID 系统化增强 - customize.sh（v4.3 重写版）
 #
 # 【这一版和 v1.0 的核心区别，务必看一下】
 # v1.0 的做法：刷机时现场用 `pm path` 找到手机上已装的 APK，复制到系统
@@ -27,26 +27,26 @@
 # 限制的原因。
 ##########################################################
 
-PKG="com.callerid.module"
-STUB_SRC="$MODPATH/CallerIDModule-stub.apk"
-TARGET_DIR="$MODPATH/system/priv-app/CallerIDModule"
+PKG="com.aksb2026.callerid.module"
+STUB_SRC="$MODPATH/Aksb2026CallerID-stub.apk"
+TARGET_DIR="$MODPATH/system/priv-app/Aksb2026CallerID"
 
 ui_print " "
 ui_print "======================================"
-ui_print " CallerIDModule 系统化增强（可选模块，v4.3）"
+ui_print " Aksb2026CallerID 系统化增强（可选模块，v4.3）"
 ui_print "======================================"
 ui_print "- 跟保活脚本模块（callerid_keepalive）完全独立，装不装、先刷哪个"
 ui_print "  都互不影响"
 ui_print "- 这一版不再要求「先装 App 再刷模块」，顺序随意"
 
 if [ ! -f "$STUB_SRC" ]; then
-    abort "! 模块包内缺少占位 APK（CallerIDModule-stub.apk），说明这份模块 zip 打包不完整，请重新下载完整的模块 zip，不要只解压部分文件手动重新打包"
+    abort "! 模块包内缺少占位 APK（Aksb2026CallerID-stub.apk），说明这份模块 zip 打包不完整，请重新下载完整的模块 zip，不要只解压部分文件手动重新打包"
 fi
 
 mkdir -p "$TARGET_DIR"
-cp -f "$STUB_SRC" "$TARGET_DIR/CallerIDModule.apk"
+cp -f "$STUB_SRC" "$TARGET_DIR/Aksb2026CallerID.apk"
 
-if [ ! -f "$TARGET_DIR/CallerIDModule.apk" ]; then
+if [ ! -f "$TARGET_DIR/Aksb2026CallerID.apk" ]; then
     abort "! 复制占位 APK 到系统分区暂存目录失败，安装中止（如果你手机上已经装了正式 APK，这个失败不会对它产生任何影响，因为本脚本全程没有触碰你已装的那份）"
 fi
 
@@ -78,5 +78,4 @@ fi
 ui_print "- 完成，请重启手机"
 ui_print "- 如果重启后出现异常（比如提示安装包无效、App 打不开），不要慌，"
 ui_print "  先移除本模块重启，再用 adb shell pm uninstall $PKG 彻底清一遍，"
-ui_print "  重新正常安装 APK 确认恢复正常，再考虑要不要重新刷这个模块并"
-ui_print "  把详细现象反馈给开发者"
+ui_print "  重新正常安装 APK 确认恢复正常即可"

@@ -14,7 +14,7 @@ LOG="$MODDIR/keepalive.log"
 # 自己会再判断一次包名存不存在，探测失败的话直接跳过，不会出错）。
 i=0
 while [ $i -lt 60 ]; do
-    if pm path "com.callerid.module" >/dev/null 2>&1; then
+    if pm path "com.aksb2026.callerid.module" >/dev/null 2>&1; then
         break
     fi
     sleep 1

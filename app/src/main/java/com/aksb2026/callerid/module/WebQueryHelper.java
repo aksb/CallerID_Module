@@ -1,4 +1,4 @@
-package com.callerid.module;
+package com.aksb2026.callerid.module;
 
 import android.content.Context;
 import android.graphics.PixelFormat;

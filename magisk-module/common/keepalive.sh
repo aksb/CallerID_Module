@@ -10,7 +10,7 @@
 # 结果（已启用 ✔ / 未启用 ✘），不用再另外跑一遍"验证命令"去肉眼比对
 # 英文输出里有没有 allow 字样。
 
-PKG="com.callerid.module"
+PKG="com.aksb2026.callerid.module"
 
 run_keepalive() {
     LOG="$1"

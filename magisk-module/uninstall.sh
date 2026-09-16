@@ -8,7 +8,7 @@
 # appops 的设置保持原样，用户以后想恢复原状的话去 App 里"一键保活"按钮或
 # 手动敲命令都能自己控制。
 
-PKG="com.callerid.module"
+PKG="com.aksb2026.callerid.module"
 if pm path "$PKG" >/dev/null 2>&1; then
     dumpsys deviceidle whitelist -"$PKG" >/dev/null 2>&1
 fi

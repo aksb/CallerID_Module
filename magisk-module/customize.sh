@@ -5,15 +5,15 @@
 
 SKIPMOUNT=true
 
-ui_print "- CallerIDModule 保活助手"
-ui_print "  纯脚本模块，不含 APK，只有装了 com.callerid.module 这个包名的 App"
+ui_print "- Aksb2026CallerID 保活助手"
+ui_print "  纯脚本模块，不含 APK，只有装了 com.aksb2026.callerid.module 这个包名的 App"
 ui_print "  时才会在开机后自动生效；没装这个 App 完全没有影响。"
 ui_print "  重启后，Magisk App 里这个模块会多出一个 Action 按钮，点一下可以"
 ui_print "  立即重新执行一次并直接看到中文结果，不用再重启（首次刷入后"
 ui_print "  要先重启一次这个按钮才会出现，这是 Magisk 本身的机制）。"
 
-if pm path com.callerid.module >/dev/null 2>&1; then
-    ui_print "- 检测到已安装 com.callerid.module，重启后即会自动生效"
+if pm path com.aksb2026.callerid.module >/dev/null 2>&1; then
+    ui_print "- 检测到已安装 com.aksb2026.callerid.module，重启后即会自动生效"
 else
-    ui_print "- 当前还没有安装 com.callerid.module，之后装了这个包名后重启一次即可生效"
+    ui_print "- 当前还没有安装 com.aksb2026.callerid.module，之后装了这个包名后重启一次即可生效"
 fi
