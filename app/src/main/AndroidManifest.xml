@@ -18,11 +18,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
-        申请忽略电池优化用（v4.0 新增，"Root保活教程"板块里"申请忽略电池优化
-        （无需 Root）"按钮需要这个权限才能弹出系统那个"允许后台运行"对话框）。
-        这是普通权限，安装时自动授予，不会弹运行时权限请求框。
+        v4.9 清理：REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 权限已经没有用了——申请这个
+        权限用的"🔋 申请忽略电池优化（无需 Root）"按钮，在"Root保活教程"改成
+        ①②③➃弹窗式设计那一轮（v4.5）就已经删掉了，Java 代码里再也没有地方
+        引用这个权限，属于遗留下来忘记一起清的死代码，这次顺手去掉。
     -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- ❌ 已移除 FOREGROUND_SERVICE 和 FOREGROUND_SERVICE_PHONE_CALL -->
     <!-- 改为普通 Service，彻底规避 Android 14+ 的前台服务类型校验崩溃 -->
@@ -47,6 +47,15 @@
         <meta-data android:name="xposedmodule"      android:value="true" />
         <meta-data android:name="xposeddescription"  android:value="来电号码识别悬浮窗" />
         <meta-data android:name="xposedminversion"   android:value="93" />
+        <!--
+            v4.9 新增：作用域推荐列表。HookEntry 挂的是 TelephonyRegistry，这个类
+            本来就运行在 system_server（"系统框架"）进程里，本模块要生效，用户
+            必须在 LSPosed 的作用域勾选界面里手动找到并勾上"系统框架"——之前
+            LSPosed 的推荐列表里没有把它顶到前面，用户容易漏勾。这里用官方支持
+            的 xposedscope 声明把 "android"（系统框架的包名）标记为推荐项，
+            LSPosed 会把它置顶显示，降低漏勾的概率。
+        -->
+        <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
 
         <activity
             android:name=".MainActivity"

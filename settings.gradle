@@ -15,6 +15,9 @@ dependencyResolutionManagement {
         // Fallback mirror for the legacy Xposed API 82 artifact
         maven { url 'https://artifactory.appodeal.com/appodeal-public/' }
         maven { url 'https://maven.aliyun.com/repository/public/' }
+        // v4.9 新增："⑤ Root 高级选项"隐藏功能用到的 libsu 库发布在 JitPack 上。
+        // 按上面那条注释的提醒，放在 api.xposed.info 后面，避免不必要的超时。
+        maven { url 'https://jitpack.io' }
     }
 }
 

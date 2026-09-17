@@ -5,7 +5,9 @@ import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -114,13 +116,33 @@ public class MainActivity extends Activity {
               + "4. ROOT保活（防止 Service 被杀）见软件底部「ROOT保活教程」板块。",
                 12, 0xFFFF9900), 4);
 
-        // ── 顶部状态总览（v3.21 新增）：三行，实时镜像下面各自板块里的状态——
-        // 具体的“真正数值”和配色都在各自板块的刷新逻辑里一并更新这三行
-        // （见 refreshServiceStatus / refreshForceCellularStatus / refreshSbStatus），
-        // 这里只负责先把三个空 TextView 摆出来占位。
-        TextView tvTopServiceStatus = new TextView(this);
-        tvTopServiceStatus.setTextSize(13);
-        add(root, tvTopServiceStatus, 8);
+        // ── 来电识别服务：真正的功能开关（v4.9 重新设计）───────────────────
+        // 之前"启动/停止来电识别服务"两个按钮 + 顶部状态镜像行，实际上完全不
+        // 影响来电时会不会弹悬浮窗——CallReceiver 是独立注册的广播接收器，
+        // 来电时系统会单独把它拉起来，跟这个按钮点没点过、这个常驻服务
+        // 活没活着毫无关系，那一整套东西展示的只是一个对结果没有任何影响
+        // 的中间状态，才会让"闲置"和"停止"看起来自相矛盾。
+        //
+        // 现在改成货真价实的开关：直接用 PackageManager 禁用/启用
+        // CallReceiver 这个组件本身——选"关闭"之后，系统连广播都不会往这个
+        // 组件投递，来电真的不会再弹出来；选"开启"立刻恢复。这个状态由
+        // 系统本身持久化（存在 PackageManager 的组件状态记录里，跨重启
+        // 有效），不需要我们自己再另外存一份，天然不会跟实际行为不一致。
+        // 默认"开启"，跟"装完就能用、不用手动设置"的一贯设计保持一致。
+        add(root, section("来电识别服务", 20), 8);
+        RadioGroup rgCallService = new RadioGroup(this);
+        rgCallService.setOrientation(RadioGroup.HORIZONTAL);
+        RadioButton rbCallServiceOn  = radioBtn("开启");
+        RadioButton rbCallServiceOff = radioBtn("关闭");
+        rgCallService.addView(rbCallServiceOn);
+        rgCallService.addView(rbCallServiceOff);
+        (isCallServiceEnabled() ? rbCallServiceOn : rbCallServiceOff).setChecked(true);
+        rgCallService.setOnCheckedChangeListener((group, checkedId) -> {
+            boolean enable = checkedId == rbCallServiceOn.getId();
+            setCallServiceEnabled(enable);
+            toast(enable ? "来电识别服务已开启" : "来电识别服务已关闭");
+        });
+        add(root, rgCallService, 8);
 
         TextView tvTopForceCellular = new TextView(this);
         tvTopForceCellular.setTextSize(13);
@@ -199,60 +221,9 @@ public class MainActivity extends Activity {
                 Uri.parse("package:" + getPackageName()))));
         add(boardPermService, btnOverlay, 8);
 
-        Button btnStart = btn("▶ 启动来电识别服务", 0xFF2E7D32);
-        add(boardPermService, btnStart, 6);
-
-        Button btnStop = btn("⏹ 停止来电识别服务", 0xFFB71C1C);
-        add(boardPermService, btnStop, 6);
-
-        // 状态显示：进入设置页时查一次真实运行状态（用 ActivityManager 查询，
-        // 不用进程内静态标志位——因为普通 Service 常被系统按后台限制杀掉重启进程，
-        // 静态字段在新进程里会被重置，导致显示和真实状态不一致）；
-        // 点击"启动/停止"后也会在本页面内立即刷新一次，做到基本的实时反馈。
-        TextView tvServiceStatus = new TextView(this);
-        tvServiceStatus.setTextSize(14); // 和按钮文字一样大
-        add(boardPermService, tvServiceStatus, 6);
-
-        TextView tvServiceStatusHint = title(
-                "如果上面「当前状态」显示闲置，这是常见现象（尤其内存较小的机型），不代表"
-              + "来电悬浮窗弹不出来——每次真实来电都会独立重新拉起，不依赖这个常驻状态。"
-              + "不放心的话，用下面「模拟来电测试」直接验证一次就知道准不准。",
-                11, 0xFF777777);
-        add(boardPermService, tvServiceStatusHint, 2);
-
-        Runnable refreshServiceStatus = () -> {
-            boolean running = isFloatServiceRunning();
-            if (running) {
-                setStatusText(tvServiceStatus, "当前状态：", "已启动", 0xFF44CC44);
-                setStatusText(tvTopServiceStatus, "来电识别服务状态：", "已启动", 0xFF44CC44);
-            } else {
-                setStatusText(tvServiceStatus, "当前状态：", "闲置", 0xFFFFA726);
-                setStatusText(tvTopServiceStatus, "来电识别服务状态：", "闲置", 0xFFFFA726);
-            }
-        };
-        refreshServiceStatus.run();
-
-        btnStart.setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle("确认")
-                .setMessage("确定启动来电识别服务吗？")
-                .setPositiveButton("确定", (d, w) -> {
-                    startService(new Intent(this, FloatWindowService.class));
-                    toast("服务已启动");
-                    new Handler(Looper.getMainLooper()).postDelayed(refreshServiceStatus, 200);
-                })
-                .setNegativeButton("取消", null)
-                .show());
-
-        btnStop.setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle("确认")
-                .setMessage("确定停止来电识别服务吗？")
-                .setPositiveButton("确定", (d, w) -> {
-                    stopService(new Intent(this, FloatWindowService.class));
-                    toast("服务已停止");
-                    new Handler(Looper.getMainLooper()).postDelayed(refreshServiceStatus, 200);
-                })
-                .setNegativeButton("取消", null)
-                .show());
+        // v4.9：原来这里的"启动/停止来电识别服务"按钮 + 状态显示已经整体挪到
+        // 顶部、改成了真正的功能开关（见 onCreate 顶部"来电识别服务"那一块），
+        // 这里不再重复。
 
         LinearLayout boardForceCellularWarning = new LinearLayout(this);
         boardForceCellularWarning.setOrientation(LinearLayout.VERTICAL);
@@ -1416,6 +1387,78 @@ public class MainActivity extends Activity {
         btnShowSystemizeModule.setOnClickListener(v ->
                 showInfoDialog("➃ Systemize-Magisk 模块（可选，有风险）", systemizeModuleInfo));
 
+        // ── ⑤ Root 高级选项（v4.9 新增，隐藏功能） ──────────────────────────
+        // 默认关闭、教程里刻意不显眼；效果上相当于把①②③➃全部合并到 App 自己
+        // 内部用 root 执行，不需要再单独装 KeepAlive/Systemize 两个 Magisk
+        // 模块。这是"高级用户自己承担后果"的选项，不是推荐路径，具体风险声明
+        // 见下面 rootAdvancedDisclaimer 文案，开启前必须勾选"已知悉风险"。
+        Button btnRootAdvanced = btn("⑤ Root 高级选项（隐藏功能，谨慎开启）", 0xFF7F0000);
+        add(boardRootKeepAlive, btnRootAdvanced, 6);
+
+        final String rootAdvancedDisclaimer =
+                "这个功能会让 App 自己申请并长期持有 root 权限，用来在内部直接执行"
+              + "保活命令、并尝试把本进程的内存回收优先级调到接近系统核心进程的级别。\n\n"
+              + "这是一个纯 AI 编写的项目，没有经过人工代码审查，也没有经过大量实机测试。\n\n"
+              + "授权 root 启用此功能可能造成无限重启、卡屏死机、系统损坏（变砖）乃至硬件"
+              + "受损。在尝试开启前，请务必提前备份好个人所有重要数据。如果您缺乏刷机"
+              + "救砖经验，或不知道如何在系统崩溃时进行自救，请绝对不要尝试开启。\n\n"
+              + "一旦您选择开启本功能，即视为您已完全理解并自愿接受上述所有风险，由此"
+              + "产生的数据丢失、设备损坏等一切后果均由您本人自行承担。\n\n"
+              + "一旦系统出现不稳定，请立即关闭此功能，并撤销本 App 的 root 授权。\n\n"
+              + "具体的技术风险：调整内存回收优先级这一步，本质上是在跟系统自己的内存"
+              + "管理机制对着干——内存紧张时，系统可能被迫牺牲手机其他部分（比如别的"
+              + "App 更频繁被杀、系统界面卡顿，极端情况下可能导致整机不稳定），不是只对"
+              + "这个 App 自己有风险。\n\n"
+              + "开启后，前面①②③➃提到的 Magisk 模块就都不再需要了，可以卸载（同时装着"
+              + "也不冲突，只是没必要）。";
+
+        btnRootAdvanced.setOnClickListener(v -> {
+            if (ModuleSettings.isRootAdvancedEnabled(this)) {
+                new AlertDialog.Builder(this)
+                        .setTitle("⑤ Root 高级选项（当前已开启）")
+                        .setMessage("现在开机会自动用 root 执行一次保活命令。")
+                        .setPositiveButton("立即重新执行一次", (d, w) -> runRootAdvancedNow())
+                        .setNegativeButton("关闭此功能", (d, w) -> {
+                            ModuleSettings.setRootAdvancedEnabled(this, false);
+                            toast("已关闭。注意：本次开机期间已经改过的内存回收优先级不会自动"
+                                    + "恢复，重启一次手机即可彻底恢复默认状态。");
+                        })
+                        .setNeutralButton("取消", null)
+                        .show();
+                return;
+            }
+
+            CheckBox cbAck = new CheckBox(this);
+            cbAck.setText("我已经完整看完并知悉、接受以上所有风险");
+            cbAck.setTextColor(Color.WHITE);
+            cbAck.setPadding(dp(20), dp(4), dp(20), dp(16));
+
+            TextView tvMsg = title(rootAdvancedDisclaimer, 13, Color.WHITE);
+            tvMsg.setPadding(dp(20), dp(16), dp(20), dp(4));
+
+            LinearLayout dialogContent = new LinearLayout(this);
+            dialogContent.setOrientation(LinearLayout.VERTICAL);
+            dialogContent.setBackgroundColor(0xFF2B2B2B);
+            dialogContent.addView(tvMsg);
+            dialogContent.addView(cbAck);
+            ScrollView sv = new ScrollView(this);
+            sv.addView(dialogContent);
+
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle("⑤ Root 高级选项 —— 开启前必读")
+                    .setView(sv)
+                    .setPositiveButton("确定开启", (d, w) -> {
+                        ModuleSettings.setRootAdvancedEnabled(this, true);
+                        toast("正在申请 root 权限……");
+                        runRootAdvancedNow();
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+            cbAck.setOnCheckedChangeListener((btn2, checked) ->
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(checked));
+        });
+
         // ── 关于本软件（v3.20 新增，v3.20-2 补全真实地址，v3.21 标题居中+整体下移+新增更新地址） ──
         // 不参与折叠，永远展开、标题和正文都居中；四条地址（项目主页/更新地址/
         // 作者主页/SpamBlocker）都是真实地址，均可点击跳外部浏览器。
@@ -2180,17 +2223,34 @@ public class MainActivity extends Activity {
      * v4.5 新增："Root保活教程"①②③➃四个入口用的弹窗——标题 + 可长按选中复制的
      * 正文 + 一个"确定"按钮。正文用 title() 生成（本身就支持长按选中），外面套一层
      * ScrollView 防止内容超长时对话框顶到屏幕外。
+     *
+     * v4.9 修正：不再用系统默认主题的 AlertDialog（有些机型/系统主题下默认是
+     * 白底，配我们写死的浅灰字完全看不清）。改成自己套一层深灰底容器，跟主
+     * 界面的纯黑背景做区分，同时保证文字在任何系统主题下都看得清楚。
      */
     private void showInfoDialog(String dialogTitle, String message) {
-        TextView tv = title(message, 13, 0xFFCCCCCC);
+        TextView tv = title(message, 13, Color.WHITE);
         tv.setPadding(dp(20), dp(16), dp(20), dp(16));
         ScrollView sv = new ScrollView(this);
+        sv.setBackgroundColor(0xFF2B2B2B); // 深灰底，跟主界面纯黑背景 (0xFF121212) 区分开
         sv.addView(tv);
         new AlertDialog.Builder(this)
                 .setTitle(dialogTitle)
                 .setView(sv)
                 .setPositiveButton("确定", null)
                 .show();
+    }
+
+    /**
+     * v4.9 新增："⑤ Root 高级选项"实际执行入口。Shell.cmd().exec() 是阻塞调用
+     * （包括第一次调用时弹出的 Superuser 授权确认框，也会阻塞在这里等用户点
+     * 允许/拒绝），必须放子线程跑，不能卡主线程；执行完切回主线程弹结果。
+     */
+    private void runRootAdvancedNow() {
+        new Thread(() -> {
+            String result = RootAdvancedHelper.runOnce(getApplicationContext());
+            runOnUiThread(() -> showInfoDialog("⑤ Root 高级选项 —— 执行结果", result));
+        }).start();
     }
 
     /**
@@ -2551,25 +2611,31 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 查询 FloatWindowService 是否正在运行（权威来源，跨进程都准确）。
-     * 不用进程内静态标志位：普通 Service 常被系统按后台限制杀掉重启进程，
-     * 静态字段在新进程里会被重置成初始值，导致显示状态和真实状态不一致。
-     * getRunningServices() 对当前 API 级别只会返回本应用自己的服务，够用。
+     * v4.9 新增：查询/设置 CallReceiver 组件本身的启用状态——这是"来电识别服务"
+     * 开关真正的数据来源，直接读写 PackageManager 的组件状态记录，系统自己
+     * 持久化、跨重启有效，不需要我们另外存一份 SharedPreferences。
+     * DONT_KILL_APP：切换这个开关不需要、也不应该杀掉整个 App 进程重启。
      */
-    private boolean isFloatServiceRunning() {
-        try {
-            ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-            if (am == null) return false;
-            for (ActivityManager.RunningServiceInfo info : am.getRunningServices(Integer.MAX_VALUE)) {
-                if (FloatWindowService.class.getName().equals(info.service.getClassName())) {
-                    return true;
-                }
-            }
-        } catch (Exception ignored) {}
-        return false;
+    private boolean isCallServiceEnabled() {
+        int state = getPackageManager().getComponentEnabledSetting(
+                new ComponentName(this, CallReceiver.class));
+        return state != PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
     }
 
-    /** 查询 QueryServerService（"SpamBlocker 联动"本地查询服务）是否正在运行，同 isFloatServiceRunning() 的做法（v3.19 新增）。 */
+    private void setCallServiceEnabled(boolean enabled) {
+        getPackageManager().setComponentEnabledSetting(
+                new ComponentName(this, CallReceiver.class),
+                enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                        : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP);
+    }
+
+    /**
+     * 查询 QueryServerService（"SpamBlocker 联动"本地查询服务）是否正在运行（v3.19 新增）。
+     * 用 ActivityManager 查真实运行状态，不用进程内静态标志位——原因和这个服务
+     * 本身的道理一样：普通 Service 常被系统按后台限制杀掉重启进程，静态字段在
+     * 新进程里会被重置，导致显示和真实状态不一致。
+     */
     private boolean isQueryServerRunning() {
         try {
             ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);

@@ -66,6 +66,7 @@ public class ModuleSettings {
     private static final String KEY_FLOAT_RESIZABLE     = "float_resizable"; // v3.19 新增
     private static final String KEY_FONT_SIZE_MODE      = "font_size_mode";  // v3.19 新增
     private static final String KEY_FONT_SIZE_LEVEL     = "font_size_level"; // v3.19 新增
+    private static final String KEY_ROOT_ADVANCED_ENABLED = "root_advanced_enabled"; // v4.9 新增
 
     // SpamBlocker 联动（v3.19 新增，见下方专属分区注释）
     private static final String KEY_SB_AUTOSTART       = "sb_autostart";
@@ -530,6 +531,21 @@ public class ModuleSettings {
         init(ctx);
         sp.edit().putBoolean(KEY_SB_AUTOSTART, autostart).apply();
         Log.d(TAG, "setSbAutostart = " + autostart);
+    }
+
+    // ── "⑤ Root 高级选项"隐藏功能开关（v4.9 新增） ──────────────────────
+    // 默认关闭，必须在 App 内看完风险声明、主动勾选"已知悉风险"才能打开。
+    // 见 RootAdvancedHelper.java 顶部注释了解这个功能具体做什么、为什么
+    // v4.1 曾经把类似功能整个移除过、这次重新引入的前提条件是什么。
+    public static boolean isRootAdvancedEnabled(Context ctx) {
+        init(ctx);
+        return sp.getBoolean(KEY_ROOT_ADVANCED_ENABLED, false);
+    }
+
+    public static void setRootAdvancedEnabled(Context ctx, boolean enabled) {
+        init(ctx);
+        sp.edit().putBoolean(KEY_ROOT_ADVANCED_ENABLED, enabled).apply();
+        Log.d(TAG, "setRootAdvancedEnabled = " + enabled);
     }
 
     /** 本地查询服务监听端口。默认 18831。改动后需要重启服务才生效（由调用方负责重启）。 */

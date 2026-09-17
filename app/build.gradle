@@ -75,4 +75,11 @@ dependencies {
 
     // 悬浮窗内网页查询：深色/浅色模式控制（WebSettingsCompat / WebViewFeature）
     implementation 'androidx.webkit:webkit:1.16.0'
+
+    // v4.9 新增："⑤ Root 高级选项"隐藏功能用——v4.1 曾经因为"root 授权全有
+    // 或全无、不应该交给功能复杂的 App"这个理由把 libsu 依赖整个去掉过
+    // （见 KeepAliveHelper.java 顶部注释），这次是作为一个默认关闭、需要
+    // 用户主动看完风险声明再确认开启的"高级/有风险"选项重新引入，不是
+    // 默认路径，两者并不矛盾。
+    implementation 'com.github.topjohnwu.libsu:core:5.2.2'
 }
