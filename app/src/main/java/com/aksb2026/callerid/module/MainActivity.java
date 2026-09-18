@@ -129,11 +129,14 @@ public class MainActivity extends Activity {
         // 系统本身持久化（存在 PackageManager 的组件状态记录里，跨重启
         // 有效），不需要我们自己再另外存一份，天然不会跟实际行为不一致。
         // 默认"开启"，跟"装完就能用、不用手动设置"的一贯设计保持一致。
-        add(root, section("来电识别服务", 20), 8);
+        add(root, line(), 12);
 
         // v5.0 新增：绿/红横幅，纯展示，本身不能点——状态以下面的圆形单选
         // 按钮为准，横幅只是把同一个状态用颜色再放大展示一遍，不是另外
         // 一份独立算出来的状态，不会重新引入"闲置/已启动"那种自相矛盾。
+        // v5.1：去掉了横幅上方原本单独的"来电识别服务"灰色大标题——横幅
+        // 文字本身已经写清楚了"来电识别服务：开启中/已关闭"，两个标题
+        // 内容重复，留一个就够。
         TextView tvCallServiceBanner = new TextView(this);
         tvCallServiceBanner.setTextColor(Color.WHITE);
         tvCallServiceBanner.setTextSize(15);
@@ -143,9 +146,13 @@ public class MainActivity extends Activity {
 
         RadioGroup rgCallService = new RadioGroup(this);
         rgCallService.setOrientation(RadioGroup.HORIZONTAL);
+        rgCallService.setGravity(Gravity.CENTER_HORIZONTAL); // v5.1：左右居中
         RadioButton rbCallServiceOn  = radioBtn("开启");
         RadioButton rbCallServiceOff = radioBtn("关闭");
         rgCallService.addView(rbCallServiceOn);
+        View rgCallServiceSpacer = new View(this); // v5.1：两个选项之间留一点距离，别挤在一起
+        rgCallServiceSpacer.setLayoutParams(new LinearLayout.LayoutParams(dp(36), 1));
+        rgCallService.addView(rgCallServiceSpacer);
         rgCallService.addView(rbCallServiceOff);
         (isCallServiceEnabled() ? rbCallServiceOn : rbCallServiceOff).setChecked(true);
 
@@ -163,6 +170,7 @@ public class MainActivity extends Activity {
             toast(enable ? "来电识别服务已开启" : "来电识别服务已关闭");
         });
         add(root, rgCallService, 8);
+        add(root, line(), 12);
 
         TextView tvTopForceCellular = new TextView(this);
         tvTopForceCellular.setTextSize(13);

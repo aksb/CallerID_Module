@@ -177,21 +177,16 @@ import androidx.webkit.WebViewFeature;
  *    正常超时时间熄屏，现在改为完全跟随系统设置的熄屏时间。FLAG_TURN_SCREEN_ON
  *    继续保留，来电时屏幕本来是灭的还是会照常点亮一次；熄屏之后悬浮窗本身
  *    不会消失，只是看不见，重新点亮屏幕后悬浮窗还在原来的状态。
- *  - 网页查询区域新增两项防骚扰处理（openWebQuery()）：
- *    ① 无条件注入一条 CSS，隐藏搜狗结果页"打开QQ浏览器，搜更多有用内容"
- *    这条自我推广横幅（class="qb-download-banner-non-share"，实测截图取得），
- *    不区分深色模式档位、不区分查询来源（其他来源匹配不到这个 class，
- *    等于空操作，无害），见 QueryWebViewClient.onPageFinished()
- *    里新增的 HIDE_QB_DOWNLOAD_BANNER_JS 注入。这是页面自己的 DOM 内容，
- *    不是真正的浏览器弹窗，所以只能这样针对性隐藏，且完全依赖这个具体
- *    class 名字——如果搜狗以后改版换了 class，这条规则会悄悄失效，需要
- *    重新抓取页面结构、更新选择器。
- *    ② 新增"防真弹窗"通用保险：setSupportMultipleWindows(false) +
- *    setJavaScriptCanOpenWindowsAutomatically(false) 明确禁止 window.open()
- *    弹出新窗口/新标签页；新增 QueryWebChromeClient，把 onJsAlert/
- *    onJsConfirm/onJsPrompt 全部自动"取消"，网页调用 alert/confirm/prompt
- *    不会弹出打断操作的原生对话框。这两条是通用防御，跟查询来源、深色
- *    模式无关，任何网站的类似骚扰都一并防住。
+ *  - 网页查询区域新增"防真弹窗"通用保险（openWebQuery()）：
+ *    setSupportMultipleWindows(false) + setJavaScriptCanOpenWindowsAutomatically(false)
+ *    明确禁止 window.open() 弹出新窗口/新标签页；新增 QueryWebChromeClient，
+ *    把 onJsAlert/onJsConfirm/onJsPrompt 全部自动"取消"，网页调用
+ *    alert/confirm/prompt 不会弹出打断操作的原生对话框。这条是通用防御，
+ *    跟查询来源、深色模式无关，任何网站的类似骚扰都一并防住（v3.19 新增）。
+ *    （v3.19 同批还加过一条只针对搜狗结果页"下载QQ浏览器"横幅的 CSS 隐藏，
+ *    v5.1 确认这条从来没起到过效果、且完全依赖对方页面的具体 class 名字、
+ *    随时可能因为对方改版而悄悄失效，已经去掉，见 QueryWebViewClient 头部
+ *    注释里的说明。）
  */
 public class FloatWindowService extends Service {
 
@@ -1369,7 +1364,7 @@ public class FloatWindowService extends Service {
         ws.setJavaScriptCanOpenWindowsAutomatically(false);
         wv.setWebChromeClient(new QueryWebChromeClient());
         // 链接跳转仍在本 WebView 内加载，不跳到外部浏览器；该子类还负责"强制反色"
-        // 模式下的 CSS 注入，以及无条件隐藏搜狗"下载QQ浏览器"横幅（见 QueryWebViewClient）
+        // 模式下的 CSS 注入（见 QueryWebViewClient）
         wv.setWebViewClient(new QueryWebViewClient());
         applyWebDarkMode(ws);
 
@@ -1406,16 +1401,22 @@ public class FloatWindowService extends Service {
     /**
      * WebViewClient 子类：链接跳转仍在本 WebView 内加载（不跳到外部浏览器）；
      * 每次页面加载完成（onPageFinished，含页内点击链接跳转到新页面触发的那次）
-     * 都会：
-     * ① 无条件注入 HIDE_QB_DOWNLOAD_BANNER_JS，隐藏搜狗结果页"打开QQ浏览器，
-     *    搜更多有用内容"这条自我推广横幅（class="qb-download-banner-non-share"，
-     *    实测截图取得，v3.19 新增）。不区分查询来源——360/自定义网址页面里
-     *    大概率没有这个 class，注入了也匹配不到任何元素，等于空操作，无害。
-     *    这是页面自己的 DOM 内容，不是真正的浏览器弹窗，所以只能这样针对性
-     *    隐藏，且完全依赖这个具体 class 名字——如果搜狗以后改版换了 class，
-     *    这条规则会悄悄失效，需要重新抓取页面结构、更新选择器。
-     * ② 在"强制反色"深色模式档位下，额外注入 FORCE_INVERT_JS 反色样式
-     *    （v3.13 新增）。
+     * 都会在"强制反色"深色模式档位下，额外注入 FORCE_INVERT_JS 反色样式
+     * （v3.13 新增）。
+     *
+     * v5.1 去掉：曾经在这里注入过 HIDE_QB_DOWNLOAD_BANNER_JS，用于隐藏搜狗
+     * 结果页"打开QQ浏览器，搜更多有用内容"这条自我推广横幅（v3.19 新增，
+     * 靠匹配一个具体 class 名字实现）。用户反馈这个功能本来就没起到过
+     * 屏蔽效果（大概率是搜狗后来改版换了 class，规则悄悄失效了，当时留的
+     * 注释里也提到过这个可能性），平时也很少用到查询网页这个功能，一直没
+     * 发现。既然没有正面效果、还占着一段完全依赖对方页面结构、随时可能
+     * 出岔子的代码，直接去掉，恢复成网页原本默认打开的样子，不做任何
+     * 针对搜狗页面内容的干预。
+     *
+     * 注意这个和 QueryWebChromeClient 里"拦截 alert()/confirm()/prompt()
+     * 真弹窗、禁用 window.open() 新窗口"是两件不同的事——那部分是通用的、
+     * 对所有网站都生效、且确认有效的防护，跟搜狗这个具体页面没关系，
+     * 这次没有跟着一起去掉。
      */
     private class QueryWebViewClient extends WebViewClient {
         private static final String FORCE_INVERT_JS =
@@ -1426,20 +1427,9 @@ public class FloatWindowService extends Service {
                 + "document.head.appendChild(s);"
                 + "})();";
 
-        // v3.19 新增：隐藏搜狗结果页"下载QQ浏览器"横幅，class 名字通过实际截图
-        // Elements 面板取得（qb-download-banner-non-share），只隐藏这一个容器，
-        // 不影响页面其他内容。
-        private static final String HIDE_QB_DOWNLOAD_BANNER_JS =
-                "(function(){"
-                + "var s=document.createElement('style');"
-                + "s.innerHTML='.qb-download-banner-non-share{display:none !important;}';"
-                + "document.head.appendChild(s);"
-                + "})();";
-
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
-            try { view.evaluateJavascript(HIDE_QB_DOWNLOAD_BANNER_JS, null); } catch (Exception ignored) {}
             if (ModuleSettings.getWebDarkMode(FloatWindowService.this)
                     == ModuleSettings.WEB_DARK_MODE_FORCE_INVERT) {
                 try { view.evaluateJavascript(FORCE_INVERT_JS, null); } catch (Exception ignored) {}
