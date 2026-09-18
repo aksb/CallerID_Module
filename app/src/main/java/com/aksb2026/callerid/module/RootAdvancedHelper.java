@@ -74,4 +74,35 @@ final class RootAdvancedHelper {
         boolean ok = out.contains(expect);
         return desc + "：" + (ok ? "已启用 ✔" : "未启用 ✘");
     }
+
+    /** 只读查询结果，给"保活明细"用——不执行任何 set 命令，纯粹查当前状态。 */
+    static final class BgOpsStatus {
+        boolean rootOk;
+        boolean runInBackground;
+        boolean runAnyInBackground;
+    }
+
+    /**
+     * v5.0 新增：只读检测 RUN_IN_BACKGROUND / RUN_ANY_IN_BACKGROUND 两项，供
+     * "保活明细"在⑤已经开启的情况下顺带展示更准确的状态。只调用只读的
+     * `cmd appops get`，不执行任何 set 命令，不碰 oom_score_adj，不会有
+     * 任何副作用。Shell.getShell() 在⑤已经开启、之前已经拿到过 root 授权的
+     * 前提下，只是复用已经建立好的 root 会话，不会重新弹一次授权确认框——
+     * 调用方必须自己保证只在 ModuleSettings.isRootAdvancedEnabled() 为 true
+     * 时才调用这个方法，不能拿它去"顺便试探一下有没有 root"。
+     */
+    static BgOpsStatus checkBackgroundOps(Context ctx) {
+        BgOpsStatus s = new BgOpsStatus();
+        s.rootOk = Shell.getShell().isRoot();
+        if (!s.rootOk) return s;
+        String pkg = ctx.getPackageName();
+        s.runInBackground = queryAllow(pkg, "RUN_IN_BACKGROUND");
+        s.runAnyInBackground = queryAllow(pkg, "RUN_ANY_IN_BACKGROUND");
+        return s;
+    }
+
+    private static boolean queryAllow(String pkg, String op) {
+        Shell.Result r = Shell.cmd("cmd appops get " + pkg + " " + op).exec();
+        return String.join("\n", r.getOut()).contains("allow");
+    }
 }

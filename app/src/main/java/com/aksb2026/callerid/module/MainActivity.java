@@ -111,7 +111,7 @@ public class MainActivity extends Activity {
         add(root, title("v1.5  基于百度号码查询页解析", 12, 0xFF44CC44), 4);
         add(root, title(
                 "1. LSPosed → 来电识别 → 启用 → 作用域选「系统框架」→ 重启后生效。\n"
-              + "2. 授权悬浮窗 → 启动服务\n"
+              + "2. 授权悬浮窗 → 开启来电识别服务\n"
               + "3. 用「模拟来电」按钮测试，无需真来电\n"
               + "4. ROOT保活（防止 Service 被杀）见软件底部「ROOT保活教程」板块。",
                 12, 0xFFFF9900), 4);
@@ -130,6 +130,17 @@ public class MainActivity extends Activity {
         // 有效），不需要我们自己再另外存一份，天然不会跟实际行为不一致。
         // 默认"开启"，跟"装完就能用、不用手动设置"的一贯设计保持一致。
         add(root, section("来电识别服务", 20), 8);
+
+        // v5.0 新增：绿/红横幅，纯展示，本身不能点——状态以下面的圆形单选
+        // 按钮为准，横幅只是把同一个状态用颜色再放大展示一遍，不是另外
+        // 一份独立算出来的状态，不会重新引入"闲置/已启动"那种自相矛盾。
+        TextView tvCallServiceBanner = new TextView(this);
+        tvCallServiceBanner.setTextColor(Color.WHITE);
+        tvCallServiceBanner.setTextSize(15);
+        tvCallServiceBanner.setGravity(Gravity.CENTER);
+        tvCallServiceBanner.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add(root, tvCallServiceBanner, 8);
+
         RadioGroup rgCallService = new RadioGroup(this);
         rgCallService.setOrientation(RadioGroup.HORIZONTAL);
         RadioButton rbCallServiceOn  = radioBtn("开启");
@@ -137,9 +148,18 @@ public class MainActivity extends Activity {
         rgCallService.addView(rbCallServiceOn);
         rgCallService.addView(rbCallServiceOff);
         (isCallServiceEnabled() ? rbCallServiceOn : rbCallServiceOff).setChecked(true);
+
+        Runnable refreshCallServiceBanner = () -> {
+            boolean on = isCallServiceEnabled();
+            tvCallServiceBanner.setBackgroundColor(on ? 0xFF2E7D32 : 0xFFB71C1C);
+            tvCallServiceBanner.setText(on ? "✅ 来电识别服务：开启中" : "⛔ 来电识别服务：已关闭");
+        };
+        refreshCallServiceBanner.run();
+
         rgCallService.setOnCheckedChangeListener((group, checkedId) -> {
             boolean enable = checkedId == rbCallServiceOn.getId();
             setCallServiceEnabled(enable);
+            refreshCallServiceBanner.run();
             toast(enable ? "来电识别服务已开启" : "来电识别服务已关闭");
         });
         add(root, rgCallService, 8);
@@ -175,6 +195,13 @@ public class MainActivity extends Activity {
 
         refreshKeepAliveStatus = () -> new Thread(() -> {
             KeepAliveHelper.Status st = KeepAliveHelper.check(this);
+            // v5.0 新增：只有⑤ Root 高级选项已经开启（也就是已经决定长期把 root
+            // 交给这个 App）时，才顺带用已经建立好的 root 会话查一下这两项—— 不会
+            // 因为用户点开"保活明细"这种看起来无害的操作，就主动弹一次 root
+            // 授权请求，见 RootAdvancedHelper.checkBackgroundOps() 头部注释。
+            boolean rootMode = ModuleSettings.isRootAdvancedEnabled(this);
+            RootAdvancedHelper.BgOpsStatus bg =
+                    rootMode ? RootAdvancedHelper.checkBackgroundOps(this) : null;
             runOnUiThread(() -> {
                 setStatusText(tvTopKeepAlive, "保活状态：", st.allGood(), "已保活", "未保活");
 
@@ -182,8 +209,13 @@ public class MainActivity extends Activity {
                 detail.append(st.overlayGranted ? "✅" : "❌").append(" 悬浮窗权限\n");
                 detail.append(st.batteryIgnored ? "✅" : "❌").append(" 电池优化白名单\n");
                 detail.append(st.standbyOk ? "✅" : "❌").append(" 应用待机分桶\n");
-                detail.append("ℹ️ RUN_IN_BACKGROUND 等 appops 项没有公开读取 API，App 自己查不到，"
-                        + "已执行请参考下方「Root保活教程」里的验证命令自行确认。");
+                if (bg != null && bg.rootOk) {
+                    detail.append(bg.runInBackground ? "✅" : "❌").append(" 后台运行权限\n");
+                    detail.append(bg.runAnyInBackground ? "✅" : "❌").append(" 任意后台运行权限");
+                } else {
+                    detail.append("ℹ️ RUN_IN_BACKGROUND 等 appops 如果没有授权 root，App 自己查不到，"
+                            + "已执行请参考下方「Root保活教程」里的验证命令自行确认。");
+                }
                 tvKeepAliveDetail.setText(detail.toString());
 
                 SpannableString jump = new SpannableString("去处理 →");
