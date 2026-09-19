@@ -54,6 +54,9 @@ public class ModuleSettings {
     private static final String KEY_WEB_QUERY_ENABLED   = "web_query_enabled";
     private static final String KEY_WEB_QUERY_SOURCE    = "web_query_source";
     private static final String KEY_WEB_QUERY_CUSTOM_URL = "web_query_custom_url";
+    private static final String KEY_CUSTOM_API_URL        = "custom_api_url";        // v5.2 新增
+    private static final String KEY_CUSTOM_API_LABEL_PATH = "custom_api_label_path"; // v5.2 新增
+    private static final String KEY_CUSTOM_API_SCAM_PATH  = "custom_api_scam_path";  // v5.2 新增
     private static final String KEY_WEB_FONT_ZOOM       = "web_font_zoom";
     private static final String KEY_WEB_HEIGHT_PX       = "web_height_px"; // v3.17：原 web_bottom_crop_px 改为直接存绝对高度
     private static final String KEY_WEB_DARK_MODE       = "web_dark_mode";
@@ -251,6 +254,48 @@ public class ModuleSettings {
         init(ctx);
         sp.edit().putString(KEY_WEB_QUERY_CUSTOM_URL, url == null ? "" : url).apply();
         Log.d(TAG, "setWebQueryCustomUrl = " + url);
+    }
+
+    // ── 自定义 API 查询（v5.2 新增） ─────────────────────────────────────
+    // 默认全部为空字符串＝未配置＝不启用，跟"自定义网址"是完全独立的两件
+    // 事：自定义网址是"打开一个网页让你自己看"，这个是"发一个 GET 请求、
+    // 自动解析 JSON、直接给出结果"，不需要用户自己看网页。网址里同样用
+    // "来电号码"这四个字当占位词，跟"自定义网址"保持一致的写法习惯。
+    // 具体接入逻辑见 WebQueryHelper.query() 里的调用，以及该文件里的
+    // extractJsonPath()。
+    public static String getCustomApiUrl(Context ctx) {
+        init(ctx);
+        return sp.getString(KEY_CUSTOM_API_URL, "");
+    }
+
+    public static void setCustomApiUrl(Context ctx, String url) {
+        init(ctx);
+        sp.edit().putString(KEY_CUSTOM_API_URL, url == null ? "" : url).apply();
+        Log.d(TAG, "setCustomApiUrl = " + url);
+    }
+
+    /** 从返回 JSON 里取标签文字的字段路径，点号分隔多级，例如 "data.tag"。 */
+    public static String getCustomApiLabelPath(Context ctx) {
+        init(ctx);
+        return sp.getString(KEY_CUSTOM_API_LABEL_PATH, "");
+    }
+
+    public static void setCustomApiLabelPath(Context ctx, String path) {
+        init(ctx);
+        sp.edit().putString(KEY_CUSTOM_API_LABEL_PATH, path == null ? "" : path).apply();
+        Log.d(TAG, "setCustomApiLabelPath = " + path);
+    }
+
+    /** 从返回 JSON 里取"是否诈骗"布尔字段的路径，例如 "data.is_scam"。留空则不识别。 */
+    public static String getCustomApiScamPath(Context ctx) {
+        init(ctx);
+        return sp.getString(KEY_CUSTOM_API_SCAM_PATH, "");
+    }
+
+    public static void setCustomApiScamPath(Context ctx, String path) {
+        init(ctx);
+        sp.edit().putString(KEY_CUSTOM_API_SCAM_PATH, path == null ? "" : path).apply();
+        Log.d(TAG, "setCustomApiScamPath = " + path);
     }
 
     /** 网页字体缩放档位：WEB_FONT_ZOOM_SYSTEM/80/100/120/150。默认跟随系统。 */
@@ -667,6 +712,9 @@ public class ModuleSettings {
         o.put(KEY_WEB_QUERY_ENABLED, isWebQueryEnabled(ctx));
         o.put(KEY_WEB_QUERY_SOURCE, getWebQuerySource(ctx));
         o.put(KEY_WEB_QUERY_CUSTOM_URL, getWebQueryCustomUrl(ctx));
+        o.put(KEY_CUSTOM_API_URL, getCustomApiUrl(ctx));
+        o.put(KEY_CUSTOM_API_LABEL_PATH, getCustomApiLabelPath(ctx));
+        o.put(KEY_CUSTOM_API_SCAM_PATH, getCustomApiScamPath(ctx));
         o.put(KEY_WEB_FONT_ZOOM, getWebFontZoom(ctx));
         o.put(KEY_WEB_TOP_CROP_PX_SOGOU, getWebTopCropPx(ctx, WEB_SOURCE_SOGOU));
         o.put(KEY_WEB_TOP_CROP_PX_360, getWebTopCropPx(ctx, WEB_SOURCE_360));
@@ -704,6 +752,9 @@ public class ModuleSettings {
         if (o.has(KEY_WEB_QUERY_ENABLED))     setWebQueryEnabled(ctx, o.getBoolean(KEY_WEB_QUERY_ENABLED));
         if (o.has(KEY_WEB_QUERY_SOURCE))      setWebQuerySource(ctx, o.getInt(KEY_WEB_QUERY_SOURCE));
         if (o.has(KEY_WEB_QUERY_CUSTOM_URL))  setWebQueryCustomUrl(ctx, o.getString(KEY_WEB_QUERY_CUSTOM_URL));
+        if (o.has(KEY_CUSTOM_API_URL))        setCustomApiUrl(ctx, o.getString(KEY_CUSTOM_API_URL));
+        if (o.has(KEY_CUSTOM_API_LABEL_PATH)) setCustomApiLabelPath(ctx, o.getString(KEY_CUSTOM_API_LABEL_PATH));
+        if (o.has(KEY_CUSTOM_API_SCAM_PATH))  setCustomApiScamPath(ctx, o.getString(KEY_CUSTOM_API_SCAM_PATH));
         if (o.has(KEY_WEB_FONT_ZOOM))         setWebFontZoom(ctx, o.getInt(KEY_WEB_FONT_ZOOM));
         if (o.has(KEY_WEB_TOP_CROP_PX_SOGOU)) setWebTopCropPx(ctx, WEB_SOURCE_SOGOU, o.getInt(KEY_WEB_TOP_CROP_PX_SOGOU));
         if (o.has(KEY_WEB_TOP_CROP_PX_360))   setWebTopCropPx(ctx, WEB_SOURCE_360, o.getInt(KEY_WEB_TOP_CROP_PX_360));

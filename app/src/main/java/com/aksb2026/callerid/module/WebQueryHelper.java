@@ -19,6 +19,20 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONObject;
+
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.Call;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+// 注意：这里故意不 import okhttp3.Callback——本类自己已经声明了一个同名的
+// public interface Callback（见下方），用到 OkHttp 那个回调接口的地方，
+// 必须写成 okhttp3.Callback 全限定名，否则会被本类自己的 Callback 接口
+// 挡住（Java 对同名类型的就近优先规则），编译时方法签名会对不上。
+
 /**
  * WebView 查询 mhaoma.baidu.com，轮询 DOM 出现后立即抓取，不死等固定秒数。
  * v1.5：
@@ -1770,10 +1784,32 @@ public class WebQueryHelper {
             return;
         }
 
-        // 3.5 百度静默查询开关（v3.13 新增）：只影响本步骤（联网查询），
-        //     前面 0~3 步（自定义库/缓存/白名单/内置库）命中与否完全不受影响。
-        //     关闭后，本地未命中时不再联网查询，直接回落到"未知号码"（不写入缓存，
-        //     以便用户重新开启后仍能正常联网查询，不被占位结果挡住）。
+        // 3.5 自定义 API 查询（v5.2 新增）：默认未配置（网址为空）时直接跳过，
+        //     不影响任何现有行为。配置了才会尝试发一次请求；命中就直接返回，
+        //     不会再去跑后面百度那套隐藏 WebView 查询；请求失败/解析不出结果，
+        //     就自动继续走原来的百度兜底，不会中断整条查询链路。
+        String customApiUrl = ModuleSettings.getCustomApiUrl(ctx);
+        if (customApiUrl != null && !customApiUrl.trim().isEmpty()) {
+            queryCustomApi(ctx, customApiUrl, number, result -> {
+                if (result != null && !result.trim().isEmpty()) {
+                    Log.d(TAG, "CUSTOM_API hit: " + number + " -> " + result);
+                    new Handler(Looper.getMainLooper()).post(() -> cb.onResult(result));
+                } else {
+                    proceedToBaiduQuery(ctx, number, cb);
+                }
+            });
+            return;
+        }
+
+        proceedToBaiduQuery(ctx, number, cb);
+    }
+
+    private void proceedToBaiduQuery(Context ctx, String number, Callback cb) {
+        // 3.6 百度静默查询开关（v3.13 新增）：只影响本步骤（联网查询），
+        //     前面 0~3 步（自定义库/缓存/白名单/内置库）、以及刚才的自定义 API
+        //     命中与否完全不受影响。关闭后，本地未命中时不再联网查询，直接
+        //     回落到"未知号码"（不写入缓存，以便用户重新开启后仍能正常联网
+        //     查询，不被占位结果挡住）。
         if (!ModuleSettings.isBaiduSilentQueryEnabled(ctx)) {
             Log.d(TAG, "baidu silent query disabled, skip WebView query");
             new Handler(Looper.getMainLooper()).post(() -> cb.onResult(null));
@@ -1793,6 +1829,82 @@ public class WebQueryHelper {
                     () -> doWebViewQuery(ctx, number, cb));
         } else {
             doWebViewQuery(ctx, number, cb);
+        }
+    }
+
+    private interface RawResultCallback {
+        void onDone(String result);
+    }
+
+    /**
+     * v5.2 新增：请求用户自己配置的"自定义 API"，解析 JSON，按配置的字段路径
+     * 取出标签文字（以及可选的"是否诈骗"布尔字段）。网络请求用 OkHttp 的异步
+     * enqueue()，不会阻塞调用方所在的线程。
+     *
+     * 拿到 is_scam=true 时，直接在最终文字结果里补一句"（疑似诈骗）"，让它
+     * 自然落进 FloatWindowService 里已经有的关键字判色逻辑（tag.contains("诈骗")
+     * 显示红色）——复用现成机制，不需要另外给 Callback 加一个"要不要标红"的
+     * 参数，也不用改悬浮窗那边的渲染代码。
+     */
+    private void queryCustomApi(Context ctx, String urlTemplate, String number, RawResultCallback cb) {
+        String url = urlTemplate.replace("来电号码", number);
+        Request req;
+        try {
+            req = new Request.Builder().url(url).build();
+        } catch (Exception e) {
+            Log.d(TAG, "CUSTOM_API bad url: " + url, e);
+            cb.onDone(null);
+            return;
+        }
+        OkHttpClient client = new OkHttpClient.Builder()
+                .connectTimeout(8, TimeUnit.SECONDS)
+                .readTimeout(8, TimeUnit.SECONDS)
+                .build();
+        client.newCall(req).enqueue(new okhttp3.Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                Log.d(TAG, "CUSTOM_API request failed: " + e);
+                cb.onDone(null);
+            }
+
+            @Override
+            public void onResponse(Call call, Response resp) {
+                String label = null;
+                try {
+                    String body = resp.body() != null ? resp.body().string() : null;
+                    if (body != null) {
+                        JSONObject root = new JSONObject(body);
+                        String labelPath = ModuleSettings.getCustomApiLabelPath(ctx);
+                        String scamPath  = ModuleSettings.getCustomApiScamPath(ctx);
+                        label = extractJsonPath(root, labelPath);
+                        boolean isScam = "true".equalsIgnoreCase(extractJsonPath(root, scamPath));
+                        if (label != null && isScam && !label.contains("诈骗")) {
+                            label = label + "（疑似诈骗）";
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.d(TAG, "CUSTOM_API parse error: " + e);
+                } finally {
+                    resp.close();
+                }
+                cb.onDone(label);
+            }
+        });
+    }
+
+    /** 按点号分隔的字段路径从 JSON 对象里取值，例如 "data.tag"；取不到/路径为空返回 null。 */
+    private static String extractJsonPath(JSONObject root, String path) {
+        if (path == null || path.trim().isEmpty()) return null;
+        try {
+            Object cur = root;
+            for (String key : path.trim().split("\\.")) {
+                if (!(cur instanceof JSONObject)) return null;
+                cur = ((JSONObject) cur).opt(key);
+                if (cur == null) return null;
+            }
+            return String.valueOf(cur);
+        } catch (Exception e) {
+            return null;
         }
     }
 

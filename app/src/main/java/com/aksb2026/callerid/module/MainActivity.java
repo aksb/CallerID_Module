@@ -997,6 +997,82 @@ public class MainActivity extends Activity {
         add(customUrlSection, rowCustomUrl, 6);
         add(webSubContainer, customUrlSection, 0);
 
+        // ── 自定义 API（v5.2 新增）────────────────────────────────────────
+        // 跟上面"查询来源"单选框完全无关：不管现在选中的是搜狗/360/自定义，
+        // 只要这里配置了网址，内置库查不到结果时都会先自动试一次这个接口，
+        // 查到结果就直接用，不会再弹网页出来给你看；请求失败/解析不出结果，
+        // 就自动继续走原来的查询来源兜底，不影响其他任何功能。
+        // 默认全部留空＝不启用，我们不会预置任何具体网站进去，接哪个 API、
+        // 数据会发给谁，完全由你自己决定和负责。
+        LinearLayout customApiSection = new LinearLayout(this);
+        customApiSection.setOrientation(LinearLayout.VERTICAL);
+
+        add(customApiSection, title(
+                "⚠️ 来历不明的 API 可能会把你查询过的来电号码发送给对方服务器，"
+              + "存在隐私泄露风险，请只填你自己了解、信任的接口。",
+                12, 0xFFFF9900), 20);
+
+        add(customApiSection, title(
+                "自定义 API（可选，跟上面选哪个查询来源无关）：内置库查不到结果时会"
+              + "先自动尝试这个接口，查到就直接用，不会再弹网页；查不到会自动回落到"
+              + "原来的查询来源。网址同样用「来电号码」这4个字作为占位词。",
+                13, 0xFFAAAAAA), 8);
+
+        EditText etCustomApiUrl = new EditText(this);
+        etCustomApiUrl.setHint("例如：https://example.com/api?phone=来电号码");
+        etCustomApiUrl.setHintTextColor(0xFF555555);
+        etCustomApiUrl.setTextColor(Color.WHITE);
+        etCustomApiUrl.setTextSize(13);
+        etCustomApiUrl.setText(ModuleSettings.getCustomApiUrl(this));
+        etCustomApiUrl.setBackgroundColor(0xFF1E1E1E);
+        etCustomApiUrl.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add(customApiSection, etCustomApiUrl, 6);
+
+        add(customApiSection, title(
+                "标签字段路径：从返回 JSON 里取标签文字，点号分隔多级，例如 data.tag",
+                12, 0xFF777777), 10);
+        EditText etCustomApiLabelPath = new EditText(this);
+        etCustomApiLabelPath.setHint("例如：data.tag");
+        etCustomApiLabelPath.setHintTextColor(0xFF555555);
+        etCustomApiLabelPath.setTextColor(Color.WHITE);
+        etCustomApiLabelPath.setTextSize(13);
+        etCustomApiLabelPath.setText(ModuleSettings.getCustomApiLabelPath(this));
+        etCustomApiLabelPath.setBackgroundColor(0xFF1E1E1E);
+        etCustomApiLabelPath.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add(customApiSection, etCustomApiLabelPath, 6);
+
+        add(customApiSection, title(
+                "诈骗标记字段路径（可选，布尔值，命中会在结果文字里提示、自动标红，"
+              + "例如 data.is_scam，留空则不识别）：",
+                12, 0xFF777777), 10);
+        EditText etCustomApiScamPath = new EditText(this);
+        etCustomApiScamPath.setHint("例如：data.is_scam（可留空）");
+        etCustomApiScamPath.setHintTextColor(0xFF555555);
+        etCustomApiScamPath.setTextColor(Color.WHITE);
+        etCustomApiScamPath.setTextSize(13);
+        etCustomApiScamPath.setText(ModuleSettings.getCustomApiScamPath(this));
+        etCustomApiScamPath.setBackgroundColor(0xFF1E1E1E);
+        etCustomApiScamPath.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add(customApiSection, etCustomApiScamPath, 6);
+
+        Button btnSaveCustomApi = btn("保存自定义 API 设置", 0xFF1565C0);
+        btnSaveCustomApi.setOnClickListener(v -> {
+            String url = etCustomApiUrl.getText().toString().trim();
+            String labelPath = etCustomApiLabelPath.getText().toString().trim();
+            String scamPath = etCustomApiScamPath.getText().toString().trim();
+            ModuleSettings.setCustomApiUrl(this, url);
+            ModuleSettings.setCustomApiLabelPath(this, labelPath);
+            ModuleSettings.setCustomApiScamPath(this, scamPath);
+            if (!url.isEmpty() && !url.contains("来电号码")) {
+                toast("已保存（提醒：网址中未找到「来电号码」占位词，可能无法正确替换成来电号码）");
+            } else {
+                toast("已保存");
+            }
+        });
+        add(customApiSection, btnSaveCustomApi, 10);
+
+        add(webSubContainer, customApiSection, 20);
+
         // 网页顶部裁剪（v1.9 新增，v3.18 拆分为三来源各自独立值）：把网页顶部固定的
         // 搜索框/标签栏区域裁掉不显示。三个来源（搜狗/360/自定义）现在各自一份独立
         // 存储的值；UI 上只保留一个输入框，跟随上面"查询来源"单选框联动——选中哪个
