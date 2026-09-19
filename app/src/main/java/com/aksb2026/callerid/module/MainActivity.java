@@ -116,6 +116,15 @@ public class MainActivity extends Activity {
               + "4. ROOT保活（防止 Service 被杀）见软件底部「ROOT保活教程」板块。",
                 12, 0xFFFF9900), 4);
 
+        // v5.3 新增：完整查询链路一句话说明，放在最显眼的顶部，方便对照理解
+        // 下面各个查询相关板块（API查询/百度号码解析等）各自的开关到底管的是
+        // 链路里的哪一环。跟 WebQueryHelper.query() 里的真实判断顺序保持一致。
+        add(root, title(
+                "查询优先级：自定义号码＞联网缓存＞特殊号码白名单＞内置企业库命中＞"
+              + "API查询＞百度解析。\n"
+              + "当以上都未命中（或相应功能关闭）时，显示「未知号码」。",
+                12, 0xFFAAAAAA), 8);
+
         // ── 来电识别服务：真正的功能开关（v4.9 重新设计）───────────────────
         // 之前"启动/停止来电识别服务"两个按钮 + 顶部状态镜像行，实际上完全不
         // 影响来电时会不会弹悬浮窗——CallReceiver 是独立注册的广播接收器，
@@ -559,18 +568,109 @@ public class MainActivity extends Activity {
                 "建议先拖角把悬浮窗大小调好，再关闭这里锁死，防止手滑碰到误改大小。",
                 12, 0xFF777777), 6);
 
+        // ── API查询板块（v5.2 新增，v5.3 独立成板块）─────────────────────────
+        // 原来这块设置误放在"网页查询"板块里——它的实际行为（自动查、直接
+        // 吐标签，不弹网页）跟"网页查询"（手动点开浏览搜狗/360/自定义网址）
+        // 没关系，反倒跟下面"百度号码解析"是同一类东西（都是自动联网、直接
+        // 拿一个文字结果填进悬浮窗），这次挪过来单独成板块、紧挨着放在
+        // "百度号码解析"上面，跟它保持同样的"一个板块 + 一个启用/关闭"结构。
+        //
+        // 默认关闭（大部分人手上没有现成的 API，开着也没用）；网址、字段
+        // 路径都默认留空，不预置任何具体网站，接哪个 API、数据流向哪里，
+        // 完全由用户自己决定和负责。
+        add(root, line(), 14);
+        LinearLayout boardCustomApi = new LinearLayout(this);
+        boardCustomApi.setOrientation(LinearLayout.VERTICAL);
+        addCollapsibleBoard(root, "custom_api", "API查询", boardCustomApi);
+
+        add(boardCustomApi, title(
+                "⚠️ 来历不明的 API 可能会把你查询过的来电号码发送给对方服务器，"
+              + "存在隐私泄露风险，请只填你自己了解、信任的接口。",
+                12, 0xFFFF9900), 6);
+
+        RadioGroup rgCustomApiEnabled = new RadioGroup(this);
+        rgCustomApiEnabled.setOrientation(RadioGroup.HORIZONTAL);
+        RadioButton rbCustomApiOn  = radioBtn("开启");
+        RadioButton rbCustomApiOff = radioBtn("关闭");
+        rgCustomApiEnabled.addView(rbCustomApiOn);
+        rgCustomApiEnabled.addView(rbCustomApiOff);
+        (ModuleSettings.isCustomApiEnabled(this) ? rbCustomApiOn : rbCustomApiOff).setChecked(true);
+        rgCustomApiEnabled.setOnCheckedChangeListener((group, checkedId) ->
+                ModuleSettings.setCustomApiEnabled(this, checkedId == rbCustomApiOn.getId()));
+        add(boardCustomApi, rgCustomApiEnabled, 4);
+
+        add(boardCustomApi, title(
+                "开启后：内置库查不到结果时会先自动尝试下面配置的接口，查到就直接用，"
+              + "不会再弹网页；查不到（或没配置网址）会自动回落到「百度号码解析」。"
+              + "网址里用「来电号码」这4个字作为占位词。",
+                13, 0xFFAAAAAA), 10);
+
+        EditText etCustomApiUrl = new EditText(this);
+        etCustomApiUrl.setHint("例如：https://example.com/api?phone=来电号码");
+        etCustomApiUrl.setHintTextColor(0xFF555555);
+        etCustomApiUrl.setTextColor(Color.WHITE);
+        etCustomApiUrl.setTextSize(13);
+        etCustomApiUrl.setText(ModuleSettings.getCustomApiUrl(this));
+        etCustomApiUrl.setBackgroundColor(0xFF1E1E1E);
+        etCustomApiUrl.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add(boardCustomApi, etCustomApiUrl, 6);
+
+        add(boardCustomApi, title(
+                "标签字段路径：从返回 JSON 里取标签文字，点号分隔多级，例如 data.tag；"
+              + "如果结果分散在好几个字段里，用逗号隔开写多条，会自动拼成一句话，例如"
+              + "某接口分别返回 province/city/sp 三个字段，这里就填"
+              + "\"province,city,sp\"，显示效果类似\"北京 北京 移动\"。",
+                12, 0xFF777777), 10);
+        EditText etCustomApiLabelPath = new EditText(this);
+        etCustomApiLabelPath.setHint("例如：data.tag 或 province,city,sp");
+        etCustomApiLabelPath.setHintTextColor(0xFF555555);
+        etCustomApiLabelPath.setTextColor(Color.WHITE);
+        etCustomApiLabelPath.setTextSize(13);
+        etCustomApiLabelPath.setText(ModuleSettings.getCustomApiLabelPath(this));
+        etCustomApiLabelPath.setBackgroundColor(0xFF1E1E1E);
+        etCustomApiLabelPath.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add(boardCustomApi, etCustomApiLabelPath, 6);
+
+        add(boardCustomApi, title(
+                "诈骗标记字段路径（可选，布尔值，命中会在结果文字里提示、自动标红，"
+              + "例如 data.is_scam，留空则不识别）：",
+                12, 0xFF777777), 10);
+        EditText etCustomApiScamPath = new EditText(this);
+        etCustomApiScamPath.setHint("例如：data.is_scam（可留空）");
+        etCustomApiScamPath.setHintTextColor(0xFF555555);
+        etCustomApiScamPath.setTextColor(Color.WHITE);
+        etCustomApiScamPath.setTextSize(13);
+        etCustomApiScamPath.setText(ModuleSettings.getCustomApiScamPath(this));
+        etCustomApiScamPath.setBackgroundColor(0xFF1E1E1E);
+        etCustomApiScamPath.setPadding(dp(12), dp(10), dp(12), dp(10));
+        add(boardCustomApi, etCustomApiScamPath, 6);
+
+        Button btnSaveCustomApi = btn("保存 API查询 设置", 0xFF1565C0);
+        btnSaveCustomApi.setOnClickListener(v -> {
+            String url = etCustomApiUrl.getText().toString().trim();
+            String labelPath = etCustomApiLabelPath.getText().toString().trim();
+            String scamPath = etCustomApiScamPath.getText().toString().trim();
+            ModuleSettings.setCustomApiUrl(this, url);
+            ModuleSettings.setCustomApiLabelPath(this, labelPath);
+            ModuleSettings.setCustomApiScamPath(this, scamPath);
+            if (!url.isEmpty() && !url.contains("来电号码")) {
+                toast("已保存（提醒：网址中未找到「来电号码」占位词，可能无法正确替换成来电号码）");
+            } else {
+                toast("已保存");
+            }
+        });
+        add(boardCustomApi, btnSaveCustomApi, 10);
+
         // ── 百度号码解析开关（v3.13 新增，v3.19 板块改名："百度静默查询"→"百度号码解析"） ──
         // 只影响查询链路最后一步（联网查询 mhaoma.baidu.com）：关闭后本地
-        // 自定义库/缓存/白名单/内置库命中的号码完全不受影响，仅当本地未命中
-        // 时不再联网查询，直接显示"未知号码"。
+        // 自定义库/缓存/白名单/内置库/API查询命中的号码完全不受影响，仅当以上
+        // 全部未命中时才会用到这一步。
+        // v5.3：原来这里有一句解释链路顺序的小字说明，现在顶部"查询优先级"
+        // 那句已经把整条链路讲清楚了，两处重复，去掉这里这句。
         add(root, line(), 14);
         LinearLayout boardBaiduSilent = new LinearLayout(this);
         boardBaiduSilent.setOrientation(LinearLayout.VERTICAL);
         addCollapsibleBoard(root, "baidu_silent", "百度号码解析", boardBaiduSilent);
-        add(boardBaiduSilent, title(
-                "关闭后：自定义号码/联网缓存/特殊号码白名单/内置企业库命中的号码正常显示，"
-              + "不受影响；仅当以上都未命中时，不再联网查询百度，直接显示「未知号码」。",
-                12, 0xFF777777), 6);
         RadioGroup rgBaiduSilent = new RadioGroup(this);
         rgBaiduSilent.setOrientation(RadioGroup.HORIZONTAL);
         RadioButton rbBaiduOn  = radioBtn("启用");
@@ -996,82 +1096,6 @@ public class MainActivity extends Activity {
 
         add(customUrlSection, rowCustomUrl, 6);
         add(webSubContainer, customUrlSection, 0);
-
-        // ── 自定义 API（v5.2 新增）────────────────────────────────────────
-        // 跟上面"查询来源"单选框完全无关：不管现在选中的是搜狗/360/自定义，
-        // 只要这里配置了网址，内置库查不到结果时都会先自动试一次这个接口，
-        // 查到结果就直接用，不会再弹网页出来给你看；请求失败/解析不出结果，
-        // 就自动继续走原来的查询来源兜底，不影响其他任何功能。
-        // 默认全部留空＝不启用，我们不会预置任何具体网站进去，接哪个 API、
-        // 数据会发给谁，完全由你自己决定和负责。
-        LinearLayout customApiSection = new LinearLayout(this);
-        customApiSection.setOrientation(LinearLayout.VERTICAL);
-
-        add(customApiSection, title(
-                "⚠️ 来历不明的 API 可能会把你查询过的来电号码发送给对方服务器，"
-              + "存在隐私泄露风险，请只填你自己了解、信任的接口。",
-                12, 0xFFFF9900), 20);
-
-        add(customApiSection, title(
-                "自定义 API（可选，跟上面选哪个查询来源无关）：内置库查不到结果时会"
-              + "先自动尝试这个接口，查到就直接用，不会再弹网页；查不到会自动回落到"
-              + "原来的查询来源。网址同样用「来电号码」这4个字作为占位词。",
-                13, 0xFFAAAAAA), 8);
-
-        EditText etCustomApiUrl = new EditText(this);
-        etCustomApiUrl.setHint("例如：https://example.com/api?phone=来电号码");
-        etCustomApiUrl.setHintTextColor(0xFF555555);
-        etCustomApiUrl.setTextColor(Color.WHITE);
-        etCustomApiUrl.setTextSize(13);
-        etCustomApiUrl.setText(ModuleSettings.getCustomApiUrl(this));
-        etCustomApiUrl.setBackgroundColor(0xFF1E1E1E);
-        etCustomApiUrl.setPadding(dp(12), dp(10), dp(12), dp(10));
-        add(customApiSection, etCustomApiUrl, 6);
-
-        add(customApiSection, title(
-                "标签字段路径：从返回 JSON 里取标签文字，点号分隔多级，例如 data.tag",
-                12, 0xFF777777), 10);
-        EditText etCustomApiLabelPath = new EditText(this);
-        etCustomApiLabelPath.setHint("例如：data.tag");
-        etCustomApiLabelPath.setHintTextColor(0xFF555555);
-        etCustomApiLabelPath.setTextColor(Color.WHITE);
-        etCustomApiLabelPath.setTextSize(13);
-        etCustomApiLabelPath.setText(ModuleSettings.getCustomApiLabelPath(this));
-        etCustomApiLabelPath.setBackgroundColor(0xFF1E1E1E);
-        etCustomApiLabelPath.setPadding(dp(12), dp(10), dp(12), dp(10));
-        add(customApiSection, etCustomApiLabelPath, 6);
-
-        add(customApiSection, title(
-                "诈骗标记字段路径（可选，布尔值，命中会在结果文字里提示、自动标红，"
-              + "例如 data.is_scam，留空则不识别）：",
-                12, 0xFF777777), 10);
-        EditText etCustomApiScamPath = new EditText(this);
-        etCustomApiScamPath.setHint("例如：data.is_scam（可留空）");
-        etCustomApiScamPath.setHintTextColor(0xFF555555);
-        etCustomApiScamPath.setTextColor(Color.WHITE);
-        etCustomApiScamPath.setTextSize(13);
-        etCustomApiScamPath.setText(ModuleSettings.getCustomApiScamPath(this));
-        etCustomApiScamPath.setBackgroundColor(0xFF1E1E1E);
-        etCustomApiScamPath.setPadding(dp(12), dp(10), dp(12), dp(10));
-        add(customApiSection, etCustomApiScamPath, 6);
-
-        Button btnSaveCustomApi = btn("保存自定义 API 设置", 0xFF1565C0);
-        btnSaveCustomApi.setOnClickListener(v -> {
-            String url = etCustomApiUrl.getText().toString().trim();
-            String labelPath = etCustomApiLabelPath.getText().toString().trim();
-            String scamPath = etCustomApiScamPath.getText().toString().trim();
-            ModuleSettings.setCustomApiUrl(this, url);
-            ModuleSettings.setCustomApiLabelPath(this, labelPath);
-            ModuleSettings.setCustomApiScamPath(this, scamPath);
-            if (!url.isEmpty() && !url.contains("来电号码")) {
-                toast("已保存（提醒：网址中未找到「来电号码」占位词，可能无法正确替换成来电号码）");
-            } else {
-                toast("已保存");
-            }
-        });
-        add(customApiSection, btnSaveCustomApi, 10);
-
-        add(webSubContainer, customApiSection, 20);
 
         // 网页顶部裁剪（v1.9 新增，v3.18 拆分为三来源各自独立值）：把网页顶部固定的
         // 搜索框/标签栏区域裁掉不显示。三个来源（搜狗/360/自定义）现在各自一份独立

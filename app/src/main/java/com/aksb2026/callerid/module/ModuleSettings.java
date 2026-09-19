@@ -57,6 +57,7 @@ public class ModuleSettings {
     private static final String KEY_CUSTOM_API_URL        = "custom_api_url";        // v5.2 新增
     private static final String KEY_CUSTOM_API_LABEL_PATH = "custom_api_label_path"; // v5.2 新增
     private static final String KEY_CUSTOM_API_SCAM_PATH  = "custom_api_scam_path";  // v5.2 新增
+    private static final String KEY_CUSTOM_API_ENABLED    = "custom_api_enabled";    // v5.3 新增
     private static final String KEY_WEB_FONT_ZOOM       = "web_font_zoom";
     private static final String KEY_WEB_HEIGHT_PX       = "web_height_px"; // v3.17：原 web_bottom_crop_px 改为直接存绝对高度
     private static final String KEY_WEB_DARK_MODE       = "web_dark_mode";
@@ -296,6 +297,24 @@ public class ModuleSettings {
         init(ctx);
         sp.edit().putString(KEY_CUSTOM_API_SCAM_PATH, path == null ? "" : path).apply();
         Log.d(TAG, "setCustomApiScamPath = " + path);
+    }
+
+    /**
+     * "API查询"板块总开关（v5.3 新增，独立成板块后配的开关，跟"百度号码解析"
+     * 板块的开关是同一种设计）。默认关闭——大部分人手上没有现成的 API，
+     * 开着也是空跑（URL 为空时 WebQueryHelper 本来就会跳过），但显式给一个
+     * 默认关闭的开关，跟"百度号码解析"保持同样的交互习惯，用户一眼就知道
+     * 规律，不用为这一个板块单独理解一套新逻辑。
+     */
+    public static boolean isCustomApiEnabled(Context ctx) {
+        init(ctx);
+        return sp.getBoolean(KEY_CUSTOM_API_ENABLED, false);
+    }
+
+    public static void setCustomApiEnabled(Context ctx, boolean enabled) {
+        init(ctx);
+        sp.edit().putBoolean(KEY_CUSTOM_API_ENABLED, enabled).apply();
+        Log.d(TAG, "setCustomApiEnabled = " + enabled);
     }
 
     /** 网页字体缩放档位：WEB_FONT_ZOOM_SYSTEM/80/100/120/150。默认跟随系统。 */
@@ -715,6 +734,7 @@ public class ModuleSettings {
         o.put(KEY_CUSTOM_API_URL, getCustomApiUrl(ctx));
         o.put(KEY_CUSTOM_API_LABEL_PATH, getCustomApiLabelPath(ctx));
         o.put(KEY_CUSTOM_API_SCAM_PATH, getCustomApiScamPath(ctx));
+        o.put(KEY_CUSTOM_API_ENABLED, isCustomApiEnabled(ctx));
         o.put(KEY_WEB_FONT_ZOOM, getWebFontZoom(ctx));
         o.put(KEY_WEB_TOP_CROP_PX_SOGOU, getWebTopCropPx(ctx, WEB_SOURCE_SOGOU));
         o.put(KEY_WEB_TOP_CROP_PX_360, getWebTopCropPx(ctx, WEB_SOURCE_360));
@@ -755,6 +775,7 @@ public class ModuleSettings {
         if (o.has(KEY_CUSTOM_API_URL))        setCustomApiUrl(ctx, o.getString(KEY_CUSTOM_API_URL));
         if (o.has(KEY_CUSTOM_API_LABEL_PATH)) setCustomApiLabelPath(ctx, o.getString(KEY_CUSTOM_API_LABEL_PATH));
         if (o.has(KEY_CUSTOM_API_SCAM_PATH))  setCustomApiScamPath(ctx, o.getString(KEY_CUSTOM_API_SCAM_PATH));
+        if (o.has(KEY_CUSTOM_API_ENABLED))    setCustomApiEnabled(ctx, o.getBoolean(KEY_CUSTOM_API_ENABLED));
         if (o.has(KEY_WEB_FONT_ZOOM))         setWebFontZoom(ctx, o.getInt(KEY_WEB_FONT_ZOOM));
         if (o.has(KEY_WEB_TOP_CROP_PX_SOGOU)) setWebTopCropPx(ctx, WEB_SOURCE_SOGOU, o.getInt(KEY_WEB_TOP_CROP_PX_SOGOU));
         if (o.has(KEY_WEB_TOP_CROP_PX_360))   setWebTopCropPx(ctx, WEB_SOURCE_360, o.getInt(KEY_WEB_TOP_CROP_PX_360));

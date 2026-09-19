@@ -1784,12 +1784,14 @@ public class WebQueryHelper {
             return;
         }
 
-        // 3.5 自定义 API 查询（v5.2 新增）：默认未配置（网址为空）时直接跳过，
-        //     不影响任何现有行为。配置了才会尝试发一次请求；命中就直接返回，
-        //     不会再去跑后面百度那套隐藏 WebView 查询；请求失败/解析不出结果，
-        //     就自动继续走原来的百度兜底，不会中断整条查询链路。
+        // 3.5 自定义 API 查询（v5.2 新增，v5.3 加总开关）：默认关闭。未开启，
+        //     或者开启了但网址留空，都直接跳过，不影响任何现有行为。开启且
+        //     配置了网址才会尝试请求；命中就直接返回，不会再去跑后面百度那套
+        //     隐藏 WebView 查询；请求失败/解析不出结果，就自动继续走原来的
+        //     百度兜底，不会中断整条查询链路。
         String customApiUrl = ModuleSettings.getCustomApiUrl(ctx);
-        if (customApiUrl != null && !customApiUrl.trim().isEmpty()) {
+        if (ModuleSettings.isCustomApiEnabled(ctx)
+                && customApiUrl != null && !customApiUrl.trim().isEmpty()) {
             queryCustomApi(ctx, customApiUrl, number, result -> {
                 if (result != null && !result.trim().isEmpty()) {
                     Log.d(TAG, "CUSTOM_API hit: " + number + " -> " + result);
@@ -1876,7 +1878,7 @@ public class WebQueryHelper {
                         JSONObject root = new JSONObject(body);
                         String labelPath = ModuleSettings.getCustomApiLabelPath(ctx);
                         String scamPath  = ModuleSettings.getCustomApiScamPath(ctx);
-                        label = extractJsonPath(root, labelPath);
+                        label = extractJsonLabel(root, labelPath);
                         boolean isScam = "true".equalsIgnoreCase(extractJsonPath(root, scamPath));
                         if (label != null && isScam && !label.contains("诈骗")) {
                             label = label + "（疑似诈骗）";
@@ -1890,6 +1892,25 @@ public class WebQueryHelper {
                 cb.onDone(label);
             }
         });
+    }
+
+    /**
+     * 标签字段路径支持逗号分隔多条（v5.3 新增），比如某些接口把结果拆成
+     * "province,city,sp" 三个字段，这里各自取出来后用空格拼成一句话，
+     * 比如"北京 北京 移动"。哪一条取不到值就跳过，不会因为其中一条缺失
+     * 就整个显示失败；全部都取不到才返回 null。
+     */
+    private static String extractJsonLabel(JSONObject root, String pathsCsv) {
+        if (pathsCsv == null || pathsCsv.trim().isEmpty()) return null;
+        StringBuilder sb = new StringBuilder();
+        for (String path : pathsCsv.split(",")) {
+            String v = extractJsonPath(root, path.trim());
+            if (v != null && !v.trim().isEmpty()) {
+                if (sb.length() > 0) sb.append(' ');
+                sb.append(v.trim());
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : null;
     }
 
     /** 按点号分隔的字段路径从 JSON 对象里取值，例如 "data.tag"；取不到/路径为空返回 null。 */
