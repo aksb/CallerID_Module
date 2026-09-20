@@ -62,7 +62,8 @@ public class ModuleSettings {
     private static final String KEY_WEB_HEIGHT_PX       = "web_height_px"; // v3.17：原 web_bottom_crop_px 改为直接存绝对高度
     private static final String KEY_WEB_DARK_MODE       = "web_dark_mode";
     private static final String KEY_SHOW_CALLER_NUMBER  = "show_caller_number";
-    private static final String KEY_SHOW_QUERY_RESULT   = "show_query_result";
+    private static final String KEY_SHOW_QUERY_RESULT   = "show_query_result"; // v5.4 起不再在设置界面使用，保留字段仅为兼容旧的设置导出文件
+    private static final String KEY_ROW_ORDER           = "float_row_order";   // v5.4 新增
     private static final String KEY_QUERY_RESULT_LINES  = "query_result_lines"; // v3.19 新增
     private static final String KEY_WEB_QUERY_DEFAULT_EXPANDED = "web_query_default_expanded";
     private static final String KEY_BAIDU_SILENT_QUERY  = "baidu_silent_query_enabled";
@@ -441,6 +442,32 @@ public class ModuleSettings {
     }
 
     /**
+     * v5.4 新增：悬浮窗里"来电号码/API查询/百度解析"这三行的先后顺序，
+     * 逗号分隔存这三个 token 的某个排列，例如 "api,baidu,number"。
+     * 每一行本身是否显示，不由这个设置决定——来电号码看
+     * isShowCallerNumber()，API查询/百度解析分别看各自板块里的启用开关；
+     * 这里只管"如果都显示，谁先谁后"。"🔎打开网页查询"按钮不参与排序，
+     * 固定显示在这三行的最后面（见 FloatWindowService.buildView()）。
+     * 存的字符串格式不对（缺项/多项/脏数据）时，用默认顺序兜底。
+     */
+    public static String getRowOrder(Context ctx) {
+        init(ctx);
+        String order = sp.getString(KEY_ROW_ORDER, "api,baidu,number");
+        java.util.List<String> parts = java.util.Arrays.asList(order.split(","));
+        java.util.List<String> valid = java.util.Arrays.asList("api", "baidu", "number");
+        if (parts.size() != 3 || !parts.containsAll(valid)) {
+            return "api,baidu,number";
+        }
+        return order;
+    }
+
+    public static void setRowOrder(Context ctx, String order) {
+        init(ctx);
+        sp.edit().putString(KEY_ROW_ORDER, order).apply();
+        Log.d(TAG, "setRowOrder = " + order);
+    }
+
+    /**
      * 查询结果显示行数（v3.19 新增）：1＝一行（超出截断），2＝两行（超出的部分换到
      * 第二行，再超出才截断）。默认 1，与现有行为一致。
      */
@@ -735,6 +762,7 @@ public class ModuleSettings {
         o.put(KEY_CUSTOM_API_LABEL_PATH, getCustomApiLabelPath(ctx));
         o.put(KEY_CUSTOM_API_SCAM_PATH, getCustomApiScamPath(ctx));
         o.put(KEY_CUSTOM_API_ENABLED, isCustomApiEnabled(ctx));
+        o.put(KEY_ROW_ORDER, getRowOrder(ctx));
         o.put(KEY_WEB_FONT_ZOOM, getWebFontZoom(ctx));
         o.put(KEY_WEB_TOP_CROP_PX_SOGOU, getWebTopCropPx(ctx, WEB_SOURCE_SOGOU));
         o.put(KEY_WEB_TOP_CROP_PX_360, getWebTopCropPx(ctx, WEB_SOURCE_360));
@@ -776,6 +804,7 @@ public class ModuleSettings {
         if (o.has(KEY_CUSTOM_API_LABEL_PATH)) setCustomApiLabelPath(ctx, o.getString(KEY_CUSTOM_API_LABEL_PATH));
         if (o.has(KEY_CUSTOM_API_SCAM_PATH))  setCustomApiScamPath(ctx, o.getString(KEY_CUSTOM_API_SCAM_PATH));
         if (o.has(KEY_CUSTOM_API_ENABLED))    setCustomApiEnabled(ctx, o.getBoolean(KEY_CUSTOM_API_ENABLED));
+        if (o.has(KEY_ROW_ORDER))             setRowOrder(ctx, o.getString(KEY_ROW_ORDER));
         if (o.has(KEY_WEB_FONT_ZOOM))         setWebFontZoom(ctx, o.getInt(KEY_WEB_FONT_ZOOM));
         if (o.has(KEY_WEB_TOP_CROP_PX_SOGOU)) setWebTopCropPx(ctx, WEB_SOURCE_SOGOU, o.getInt(KEY_WEB_TOP_CROP_PX_SOGOU));
         if (o.has(KEY_WEB_TOP_CROP_PX_360))   setWebTopCropPx(ctx, WEB_SOURCE_360, o.getInt(KEY_WEB_TOP_CROP_PX_360));

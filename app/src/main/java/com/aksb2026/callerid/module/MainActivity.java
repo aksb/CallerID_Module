@@ -368,7 +368,7 @@ public class MainActivity extends Activity {
         boardFloatSettings.setOrientation(LinearLayout.VERTICAL);
         addCollapsibleBoard(root, "float_settings", "悬浮窗设置", boardFloatSettings);
 
-        // 是否显示来电号码（v3.13 新增，默认"是"）：控制悬浮窗第二行（号码）显隐
+        // 是否显示来电号码（v3.13 新增，默认"是"）：控制悬浮窗里"来电号码"这一行的显隐
         add(boardFloatSettings, title("是否显示来电号码：", 13, 0xFFAAAAAA), 14);
         RadioGroup rgShowNumber = new RadioGroup(this);
         rgShowNumber.setOrientation(RadioGroup.HORIZONTAL);
@@ -382,7 +382,8 @@ public class MainActivity extends Activity {
             if (suppressShowNumber[0]) { suppressShowNumber[0] = false; return; }
             boolean newVal = checkedId == rbShowNumYes.getId();
             if (!newVal && wouldHideEverything(false,
-                    ModuleSettings.isShowQueryResult(this), ModuleSettings.isWebQueryEnabled(this))) {
+                    ModuleSettings.isCustomApiEnabled(this) || ModuleSettings.isBaiduSilentQueryEnabled(this),
+                    ModuleSettings.isWebQueryEnabled(this))) {
                 confirmHideAllThenApply(
                         () -> { ModuleSettings.setShowCallerNumber(this, false); notifySettingsChanged(); },
                         () -> { suppressShowNumber[0] = true; rbShowNumYes.setChecked(true); });
@@ -393,30 +394,78 @@ public class MainActivity extends Activity {
         });
         add(boardFloatSettings, rgShowNumber, 4);
 
-        // 是否显示查询结果（v3.15 新增，默认"是"）：控制悬浮窗第一行（标签/查询结果）显隐
-        add(boardFloatSettings, title("是否显示查询结果：", 13, 0xFFAAAAAA), 14);
-        RadioGroup rgShowQueryResult = new RadioGroup(this);
-        rgShowQueryResult.setOrientation(RadioGroup.HORIZONTAL);
-        RadioButton rbShowResultYes = radioBtn("是");
-        RadioButton rbShowResultNo  = radioBtn("否");
-        rgShowQueryResult.addView(rbShowResultYes);
-        rgShowQueryResult.addView(rbShowResultNo);
-        (ModuleSettings.isShowQueryResult(this) ? rbShowResultYes : rbShowResultNo).setChecked(true);
-        boolean[] suppressShowResult = {false};
-        rgShowQueryResult.setOnCheckedChangeListener((group, checkedId) -> {
-            if (suppressShowResult[0]) { suppressShowResult[0] = false; return; }
-            boolean newVal = checkedId == rbShowResultYes.getId();
-            if (!newVal && wouldHideEverything(
-                    ModuleSettings.isShowCallerNumber(this), false, ModuleSettings.isWebQueryEnabled(this))) {
-                confirmHideAllThenApply(
-                        () -> { ModuleSettings.setShowQueryResult(this, false); notifySettingsChanged(); },
-                        () -> { suppressShowResult[0] = true; rbShowResultYes.setChecked(true); });
-                return;
+        // ── 悬浮窗行顺序（v5.4 新增，替代原来的"是否显示查询结果"开关）────────
+        // "来电号码/API查询/百度解析"这三行，每一行显示与否分别由各自的设置
+        // 决定（来电号码看上面这个开关，API查询/百度解析看各自板块里的启用
+        // 开关），这里只管三者都显示的时候谁先谁后。用"▲▼"上移/下移代替真正
+        // 的拖拽排序——效果等价，但不需要引入这个项目里从来没用过的拖拽
+        // 组件，实现和维护都更简单。"🔎打开网页查询"按钮比较特殊，固定排在
+        // 这三行最后面，不参与这里的排序。
+        add(boardFloatSettings, title(
+                "查询结果排列顺序：用下面的 ▲▼ 调整「来电号码/API查询/百度解析」这三项"
+              + "在悬浮窗里的先后顺序（某一项如果没启用，会自动跳过，不占位置）。"
+              + "「🔎打开网页查询」按钮固定显示在最下面，不参与这里的排序。",
+                12, 0xFF777777), 14);
+        // v5.5 新增：这个顺序不只是决定悬浮窗怎么摆——「API查询」和「百度解析」
+        // 两个如果都开着，SpamBlocker 联动只需要一个答案去判断拦不拦，会按这里
+        // 的顺序谁排前面就先问谁，没结果才问排后面的那个；「来电号码」这一项
+        // 只影响悬浮窗显示，不参与 SpamBlocker 的判断。
+        add(boardFloatSettings, title(
+                "这个顺序还会决定 SpamBlocker 联动优先信谁：如果「API查询」和「百度解析」"
+              + "都开着，排在前面的那个会先问，没查到结果才用排后面的那个兜底。"
+              + "「来电号码」这一项跟 SpamBlocker 判断无关，只影响悬浮窗怎么显示。",
+                11, 0xFF888888), 4);
+        LinearLayout rowOrderContainer = new LinearLayout(this);
+        rowOrderContainer.setOrientation(LinearLayout.VERTICAL);
+        add(boardFloatSettings, rowOrderContainer, 6);
+
+        List<String> rowOrderList = new ArrayList<>();
+        for (String key : ModuleSettings.getRowOrder(this).split(",")) rowOrderList.add(key);
+
+        Runnable[] refreshRowOrderUi = new Runnable[1];
+        refreshRowOrderUi[0] = () -> {
+            rowOrderContainer.removeAllViews();
+            for (int i = 0; i < rowOrderList.size(); i++) {
+                String key = rowOrderList.get(i);
+                String label = "api".equals(key) ? "API查询" : "baidu".equals(key) ? "百度解析" : "来电号码";
+
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+
+                TextView tvRowLabel = title((i + 1) + ". " + label, 14, Color.WHITE);
+                row.addView(tvRowLabel, new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+                final int idx = i;
+                Button btnUp = btn("▲", 0xFF444444);
+                btnUp.setEnabled(idx > 0);
+                if (idx == 0) btnUp.setAlpha(0.4f);
+                btnUp.setOnClickListener(v -> {
+                    Collections.swap(rowOrderList, idx, idx - 1);
+                    ModuleSettings.setRowOrder(this, String.join(",", rowOrderList));
+                    notifySettingsChanged();
+                    refreshRowOrderUi[0].run();
+                });
+                row.addView(btnUp, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                Button btnDown = btn("▼", 0xFF444444);
+                btnDown.setEnabled(idx < rowOrderList.size() - 1);
+                if (idx == rowOrderList.size() - 1) btnDown.setAlpha(0.4f);
+                btnDown.setOnClickListener(v -> {
+                    Collections.swap(rowOrderList, idx, idx + 1);
+                    ModuleSettings.setRowOrder(this, String.join(",", rowOrderList));
+                    notifySettingsChanged();
+                    refreshRowOrderUi[0].run();
+                });
+                row.addView(btnDown, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+                add(rowOrderContainer, row, i == 0 ? 0 : 6);
             }
-            ModuleSettings.setShowQueryResult(this, newVal);
-            notifySettingsChanged(); // v3.17：设置实时生效
-        });
-        add(boardFloatSettings, rgShowQueryResult, 4);
+        };
+        refreshRowOrderUi[0].run();
 
         // 查询结果显示行数（v3.19 新增，默认"一行"）：控制悬浮窗第一行（查询结果/标签）
         // 是显示一行截断，还是允许换到两行再截断
@@ -600,8 +649,9 @@ public class MainActivity extends Activity {
         add(boardCustomApi, rgCustomApiEnabled, 4);
 
         add(boardCustomApi, title(
-                "开启后：内置库查不到结果时会先自动尝试下面配置的接口，查到就直接用，"
-              + "不会再弹网页；查不到（或没配置网址）会自动回落到「百度号码解析」。"
+                "开启后：内置库查不到结果时会自动尝试下面配置的接口，在悬浮窗里单独"
+              + "占一行显示，跟「百度号码解析」是两个互不影响的独立开关，可以只开一个，"
+              + "也可以两个都开（两个都开会同时各发一次请求，各显示各的结果）。"
               + "网址里用「来电号码」这4个字作为占位词。",
                 13, 0xFFAAAAAA), 10);
 
@@ -936,7 +986,9 @@ public class MainActivity extends Activity {
         cbWebQueryEnabled.setOnCheckedChangeListener((btnView, isChecked) -> {
             if (suppressWebQuery[0]) { suppressWebQuery[0] = false; return; }
             if (!isChecked && wouldHideEverything(
-                    ModuleSettings.isShowCallerNumber(this), ModuleSettings.isShowQueryResult(this), false)) {
+                    ModuleSettings.isShowCallerNumber(this),
+                    ModuleSettings.isCustomApiEnabled(this) || ModuleSettings.isBaiduSilentQueryEnabled(this),
+                    false)) {
                 confirmHideAllThenApply(
                         () -> {
                             ModuleSettings.setWebQueryEnabled(MainActivity.this, false);
@@ -2696,11 +2748,11 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 判断"是否显示来电号码"/"是否显示查询结果"/"悬浮窗网页查询"这三项如果按给定
-     * 的新状态生效，会不会导致悬浮窗上三项全部关闭（悬浮窗形同不显示）。
-     * v3.15 新增：三个开关各自的 OnCheckedChange 回调在"用户把某一项关掉"时，
-     * 会用这个方法检查一下"关掉这一项之后，另外两项是不是也已经是关闭状态"，
-     * 只有在会导致三项全部关闭时才弹确认框，和用户关闭的先后顺序无关。
+     * 判断"是否显示来电号码"/"API查询或百度解析是否至少开着一个"/"悬浮窗网页
+     * 查询"这三者如果按给定的新状态生效，会不会导致悬浮窗上什么都不显示。
+     * v3.15 新增；v5.4 起中间那个参数的含义从"是否显示查询结果"单一开关
+     * 改成"API查询和百度解析这两个独立开关是不是都关着"（两者只要有一个开着，
+     * 就还会有内容可看），调用方相应传 isCustomApiEnabled() || isBaiduSilentQueryEnabled()。
      */
     private boolean wouldHideEverything(boolean showNumber, boolean showQueryResult, boolean webQueryEnabled) {
         return !showNumber && !showQueryResult && !webQueryEnabled;

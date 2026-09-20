@@ -1747,32 +1747,101 @@ public class WebQueryHelper {
 
     public void query(Context ctx, String number, Callback cb) {
         Log.d(TAG, "query() called, number=" + number);
+        String local = checkLocalOnly(ctx, number);
+        if (local != null) {
+            post(cb, local);
+            return;
+        }
+        // v5.4：这个方法保留给 LocalQueryServer（SpamBlocker 联动的本地查询
+        // 服务器）用——它只需要"一个最终答案"去判断要不要拦截，不需要像
+        // 悬浮窗那样把 API 和百度拆成两行分别显示。
+        // v5.5 修正：先问 API 还是先问百度，不再写死"API 优先"，改成跟悬浮窗
+        // "顺序动态排列"里 API查询/百度解析谁排在前面保持一致——用户在设置
+        // 里把哪个调到上面，SpamBlocker 判定时就优先信谁的结果，没结果时
+        // 才用另一个兜底。悬浮窗的两行独立显示改走下面新增的 queryApi()/
+        // queryBaidu()，不受这里"谁先问"的影响。
+        if (isApiBeforeBaiduInRowOrder(ctx)) {
+            queryApiRemoteOnly(ctx, number, apiResult -> {
+                if (apiResult != null && !apiResult.trim().isEmpty()) {
+                    post(cb, apiResult);
+                } else {
+                    queryBaiduRemoteOnly(ctx, number, cb);
+                }
+            });
+        } else {
+            queryBaiduRemoteOnly(ctx, number, baiduResult -> {
+                if (baiduResult != null && !baiduResult.trim().isEmpty()) {
+                    post(cb, baiduResult);
+                } else {
+                    queryApiRemoteOnly(ctx, number, cb);
+                }
+            });
+        }
+    }
 
+    /**
+     * v5.4 新增：悬浮窗"API查询"这一行专用。本地（自定义库/白名单/内置库）
+     * 命中直接用；否则查自定义 API（有自己独立的缓存，key 前缀 "api:"，
+     * 跟"百度解析"那一行的缓存互不干扰）。未开启/未配置网址时返回 null，
+     * 调用方（FloatWindowService）会据此把这一行隐藏掉。
+     */
+    public void queryApi(Context ctx, String number, Callback cb) {
+        String local = checkLocalOnly(ctx, number);
+        if (local != null) {
+            post(cb, local);
+            return;
+        }
+        queryApiRemoteOnly(ctx, number, cb);
+    }
+
+    /**
+     * v5.4 新增：悬浮窗"百度解析"这一行专用。本地命中直接用；否则查百度
+     * （独立缓存，key 前缀 "baidu:"）。未开启时返回 null。
+     */
+    public void queryBaidu(Context ctx, String number, Callback cb) {
+        String local = checkLocalOnly(ctx, number);
+        if (local != null) {
+            post(cb, local);
+            return;
+        }
+        queryBaiduRemoteOnly(ctx, number, cb);
+    }
+
+    /**
+     * v5.5 新增：判断"API查询"在用户设置的悬浮窗行顺序里，是不是排在"百度解析"
+     * 前面——query()（SpamBlocker 联动用）据此决定先问谁。跟每一项是否真正
+     * 启用无关，未启用的那个反正在 queryApiRemoteOnly()/queryBaiduRemoteOnly()
+     * 内部会自己返回 null，走到兜底分支，不用在这里单独判断。
+     */
+    private boolean isApiBeforeBaiduInRowOrder(Context ctx) {
+        String order = ModuleSettings.getRowOrder(ctx);
+        int apiIdx = order.indexOf("api");
+        int baiduIdx = order.indexOf("baidu");
+        if (apiIdx == -1) return false;
+        if (baiduIdx == -1) return true;
+        return apiIdx < baiduIdx;
+    }
+
+    /**
+     * 只查本地：自定义号码库→特殊号码白名单→内置库，命中就返回，均未命中
+     * 返回 null。v5.4 从原来的 query() 里拆出来，供 query()/queryApi()/
+     * queryBaidu() 三个入口共用，本身不含任何缓存判断——缓存现在按查询
+     * 来源（api/baidu）分别独立存放，见 queryApiRemoteOnly()/queryBaiduRemoteOnly()。
+     */
+    private String checkLocalOnly(Context ctx, String number) {
         // 0. 用户自定义号码库（最高优先级，覆盖内置库/联网结果）
         UserNumberStore.init(ctx);
         String userDefined = UserNumberStore.get(number);
         if (userDefined != null) {
             Log.d(TAG, "USER hit: " + number + " -> " + userDefined);
-            new Handler(Looper.getMainLooper()).post(() -> cb.onResult(userDefined));
-            return;
-        }
-
-        // 1. 缓存命中（即之前联网查询过的结果，优先级高于内置库）
-        CacheStore.init(ctx);
-        String cached = CacheStore.get(number);
-        if (cached != null && !cached.isEmpty()) {
-            // 空串视为无效缓存，走后面的内置库/联网查询兜底
-            Log.d(TAG, "CACHE hit: " + number + " -> " + cached);
-            new Handler(Looper.getMainLooper()).post(() -> cb.onResult(cached));
-            return;
+            return userDefined;
         }
 
         // 2. 特殊号码白名单
         for (String[] entry : SPECIAL_NUMBERS) {
             if (entry[0].equals(number)) {
                 Log.d(TAG, "SPECIAL hit: " + entry[1]);
-                new Handler(Looper.getMainLooper()).post(() -> cb.onResult(entry[1]));
-                return;
+                return entry[1];
             }
         }
 
@@ -1780,58 +1849,77 @@ public class WebQueryHelper {
         String builtin = BUILTIN_DB.get(number);
         if (builtin != null) {
             Log.d(TAG, "BUILTIN hit: " + number + " -> " + builtin);
-            new Handler(Looper.getMainLooper()).post(() -> cb.onResult(builtin));
-            return;
+            return builtin;
         }
 
-        // 3.5 自定义 API 查询（v5.2 新增，v5.3 加总开关）：默认关闭。未开启，
-        //     或者开启了但网址留空，都直接跳过，不影响任何现有行为。开启且
-        //     配置了网址才会尝试请求；命中就直接返回，不会再去跑后面百度那套
-        //     隐藏 WebView 查询；请求失败/解析不出结果，就自动继续走原来的
-        //     百度兜底，不会中断整条查询链路。
-        String customApiUrl = ModuleSettings.getCustomApiUrl(ctx);
-        if (ModuleSettings.isCustomApiEnabled(ctx)
-                && customApiUrl != null && !customApiUrl.trim().isEmpty()) {
-            queryCustomApi(ctx, customApiUrl, number, result -> {
-                if (result != null && !result.trim().isEmpty()) {
-                    Log.d(TAG, "CUSTOM_API hit: " + number + " -> " + result);
-                    new Handler(Looper.getMainLooper()).post(() -> cb.onResult(result));
-                } else {
-                    proceedToBaiduQuery(ctx, number, cb);
-                }
-            });
-            return;
-        }
-
-        proceedToBaiduQuery(ctx, number, cb);
+        return null;
     }
 
-    private void proceedToBaiduQuery(Context ctx, String number, Callback cb) {
-        // 3.6 百度静默查询开关（v3.13 新增）：只影响本步骤（联网查询），
-        //     前面 0~3 步（自定义库/缓存/白名单/内置库）、以及刚才的自定义 API
-        //     命中与否完全不受影响。关闭后，本地未命中时不再联网查询，直接
-        //     回落到"未知号码"（不写入缓存，以便用户重新开启后仍能正常联网
-        //     查询，不被占位结果挡住）。
-        if (!ModuleSettings.isBaiduSilentQueryEnabled(ctx)) {
-            Log.d(TAG, "baidu silent query disabled, skip WebView query");
-            new Handler(Looper.getMainLooper()).post(() -> cb.onResult(null));
+    /**
+     * 自定义 API 这一路的"远程部分"：先查这一路自己独立的缓存（key 前缀
+     * "api:"，不跟百度那一路混用），缓存没有才真正发请求，请求成功后写入
+     * 这一路自己的缓存。未开启/未配置网址时直接返回 null，不缓存（下次
+     * 开启之后应该能正常查，不该被一个占位空结果挡住）。
+     */
+    private void queryApiRemoteOnly(Context ctx, String number, Callback cb) {
+        if (!ModuleSettings.isCustomApiEnabled(ctx)) {
+            post(cb, null);
             return;
         }
+        String url = ModuleSettings.getCustomApiUrl(ctx);
+        if (url == null || url.trim().isEmpty()) {
+            post(cb, null);
+            return;
+        }
+        CacheStore.init(ctx);
+        String cacheKey = "api:" + number;
+        String cached = CacheStore.get(cacheKey);
+        if (cached != null && !cached.isEmpty()) {
+            Log.d(TAG, "CUSTOM_API cache hit: " + number + " -> " + cached);
+            post(cb, cached);
+            return;
+        }
+        queryCustomApi(ctx, url, number, result -> {
+            CacheStore.put(cacheKey, result != null ? result : "");
+            post(cb, result);
+        });
+    }
 
-        // 4. WebView 查询。
-        //    根据设置决定联网方式：
-        //    - 开启"强制使用流量查询"：把本进程强制切到蜂窝网络（即使当前连着 WiFi），
-        //      避免部分 WiFi 环境下 DNS 污染/路由劫持导致查不到号码。
-        //      拿不到蜂窝网络（比如设备没插卡）则按原逻辑走系统默认网络。
-        //    - 默认（未开启）：不做任何绑定，走系统默认联网方式
-        //      （有 WiFi 走 WiFi，没 WiFi 走流量，和普通 App 一致）。
+    /**
+     * 百度这一路的"远程部分"：先查这一路自己独立的缓存（key 前缀
+     * "baidu:"），缓存没有才真正跑隐藏 WebView 查询。未开启时直接返回
+     * null、不缓存。
+     */
+    private void queryBaiduRemoteOnly(Context ctx, String number, Callback cb) {
+        if (!ModuleSettings.isBaiduSilentQueryEnabled(ctx)) {
+            Log.d(TAG, "baidu silent query disabled, skip WebView query");
+            post(cb, null);
+            return;
+        }
+        CacheStore.init(ctx);
+        String cacheKey = "baidu:" + number;
+        String cached = CacheStore.get(cacheKey);
+        if (cached != null && !cached.isEmpty()) {
+            Log.d(TAG, "BAIDU cache hit: " + number + " -> " + cached);
+            post(cb, cached);
+            return;
+        }
+        // 根据设置决定联网方式：
+        // - 开启"强制使用流量查询"：把本进程强制切到蜂窝网络（即使当前连着 WiFi），
+        //   避免部分 WiFi 环境下 DNS 污染/路由劫持导致查不到号码。
+        //   拿不到蜂窝网络（比如设备没插卡）则按原逻辑走系统默认网络。
+        // - 默认（未开启）：不做任何绑定，走系统默认联网方式。
         if (ModuleSettings.isForceCellular(ctx)) {
             forceCellularThen(ctx,
-                    () -> doWebViewQuery(ctx, number, cb),
-                    () -> doWebViewQuery(ctx, number, cb));
+                    () -> doWebViewQuery(ctx, number, cacheKey, cb),
+                    () -> doWebViewQuery(ctx, number, cacheKey, cb));
         } else {
-            doWebViewQuery(ctx, number, cb);
+            doWebViewQuery(ctx, number, cacheKey, cb);
         }
+    }
+
+    private void post(Callback cb, String result) {
+        new Handler(Looper.getMainLooper()).post(() -> cb.onResult(result));
     }
 
     private interface RawResultCallback {
@@ -1929,7 +2017,7 @@ public class WebQueryHelper {
         }
     }
 
-    private void doWebViewQuery(Context ctx, String number, Callback cb) {
+    private void doWebViewQuery(Context ctx, String number, String cacheKey, Callback cb) {
         Handler main = new Handler(Looper.getMainLooper());
         main.post(() -> {
             WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
@@ -1980,14 +2068,14 @@ public class WebQueryHelper {
                     pollMs[0] += POLL_INTERVAL_MS;
                     if (pollMs[0] > POLL_MAX_MS) {
                         Log.e(TAG, "POLL_MAX reached, force extract");
-                        extractAndFinish(wv, number, done, wm, attached, cb);
+                        extractAndFinish(wv, number, cacheKey, done, wm, attached, cb);
                         return;
                     }
                     wv.evaluateJavascript(POLL_JS, val -> {
                         if (done[0]) return;
                         if (val != null && !val.contains("NOT_READY")) {
                             Log.d(TAG, "POLL ready at " + pollMs[0] + "ms");
-                            extractAndFinish(wv, number, done, wm, attached, cb);
+                            extractAndFinish(wv, number, cacheKey, done, wm, attached, cb);
                         } else {
                             main.postDelayed(pollHolder[0], POLL_INTERVAL_MS);
                         }
@@ -2055,7 +2143,7 @@ public class WebQueryHelper {
         });
     }
 
-    private void extractAndFinish(WebView wv, String number,
+    private void extractAndFinish(WebView wv, String number, String cacheKey,
                                    boolean[] done,
                                    WindowManager wm, boolean[] attached,
                                    Callback cb) {
@@ -2066,7 +2154,7 @@ public class WebQueryHelper {
             Log.d(TAG, "CARD_RAW=" + val);
             String result = parseCard(val, number);
             Log.d(TAG, "PARSED=" + result);
-            CacheStore.put(number, result != null ? result : "");
+            CacheStore.put(cacheKey, result != null ? result : "");
             cb.onResult(result);
             cleanup(wm, wv, attached);
         });

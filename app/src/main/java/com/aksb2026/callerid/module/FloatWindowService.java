@@ -281,17 +281,31 @@ public class FloatWindowService extends Service {
         // 自动展开——用户主动把小球留在折叠状态时，不应该被同一通电话的后续更新打断
         boolean isNewNumber = !number.equals(currentNumber);
         currentNumber = number;
-        showOrUpdate(number, "查询中\u2026");
+        ensureFloatViewShown(number);
         if (isNewNumber && isCollapsed) {
             expandToCard();
         }
 
-        new WebQueryHelper().query(this, number, result -> {
-            // 防止异步结果覆盖更新的来电
-            if (!number.equals(currentNumber)) return;
-            String show = (result != null && !result.isEmpty()) ? result : "未知号码";
-            new Handler(Looper.getMainLooper()).post(() -> showOrUpdate(number, show));
-        });
+        // v5.4：API查询/百度解析改成两条独立的查询，各自对应悬浮窗里独立的一行，
+        // 互不等待、互不覆盖。哪个没开就不发起查询，对应那一行本来也是隐藏的
+        // （见 buildView() 里的可见性设置），不会因为没查询而显示"查询中…"卡住。
+        if (ModuleSettings.isCustomApiEnabled(this)) {
+            updateApiTag("查询中\u2026");
+            new WebQueryHelper().queryApi(this, number, result -> {
+                // 防止异步结果覆盖更新的来电
+                if (!number.equals(currentNumber)) return;
+                String show = (result != null && !result.isEmpty()) ? result : "未知号码";
+                new Handler(Looper.getMainLooper()).post(() -> updateApiTag(show));
+            });
+        }
+        if (ModuleSettings.isBaiduSilentQueryEnabled(this)) {
+            updateBaiduTag("查询中\u2026");
+            new WebQueryHelper().queryBaidu(this, number, result -> {
+                if (!number.equals(currentNumber)) return;
+                String show = (result != null && !result.isEmpty()) ? result : "未知号码";
+                new Handler(Looper.getMainLooper()).post(() -> updateBaiduTag(show));
+            });
+        }
     }
 
     private void handleIdle() {
@@ -301,7 +315,14 @@ public class FloatWindowService extends Service {
 
     // ── 悬浮窗操作 ────────────────────────────────────────────────────────────
 
-    private void showOrUpdate(String number, String tag) {
+    /**
+     * 确保悬浮窗视图存在（不存在就创建并加到 WindowManager），并把来电号码
+     * 文字设置好。v5.4 从原来的 showOrUpdate()/updateTag() 里拆出来——原来
+     * "建视图"和"填号码+填标签"是一起做的，现在 API查询/百度解析是两条各自
+     * 独立、异步到达的结果，"确保视图存在+填号码"只需要做一次，不需要跟着
+     * 某一条查询结果的回调走。
+     */
+    private void ensureFloatViewShown(String number) {
         if (floatView == null) {
             floatView = buildView();
             lp = new WindowManager.LayoutParams(
@@ -350,7 +371,19 @@ public class FloatWindowService extends Service {
                 return;
             }
         }
-        updateTag(number, tag);
+
+        // 悬浮窗被复用给新号码（而不是重新创建）时，如果网页查询区域还开着，
+        // 里面显示的是旧号码的查询结果，直接自动关闭，避免误导
+        if (webQueryView != null && webQueryLoadedNumber != null
+                && !webQueryLoadedNumber.equals(number)) {
+            TextView btn = floatView.findViewWithTag("btn_web_toggle");
+            FrameLayout container = floatView.findViewWithTag("web_container");
+            if (btn != null && container != null) closeWebQuery(btn, container);
+        }
+
+        TextView tvNum = floatView.findViewWithTag("tv_num");
+        if (tvNum != null) tvNum.setText(number);
+        refreshTextSizing();
     }
 
     /**
@@ -491,37 +524,40 @@ public class FloatWindowService extends Service {
         });
     }
 
-    private void updateTag(String number, String tag) {
+    private void updateApiTag(String tag) {
         if (floatView == null) return;
         floatView.post(() -> {
-            // 悬浮窗被复用给新号码（而不是重新创建）时，如果网页查询区域还开着，
-            // 里面显示的是旧号码的查询结果，直接自动关闭，避免误导
-            if (webQueryView != null && webQueryLoadedNumber != null
-                    && !webQueryLoadedNumber.equals(number)) {
-                TextView btn = floatView.findViewWithTag("btn_web_toggle");
-                FrameLayout container = floatView.findViewWithTag("web_container");
-                if (btn != null && container != null) closeWebQuery(btn, container);
-            }
-
-            TextView tvNum = floatView.findViewWithTag("tv_num");
-            TextView tvTag = floatView.findViewWithTag("tv_tag");
-            if (tvNum != null) tvNum.setText(number);
-            if (tvTag != null) {
-                tvTag.setText(tag);
-                if (tag.contains("诈骗"))
-                    tvTag.setTextColor(Color.parseColor("#FF3333"));
-                else if (tag.contains("骚扰") || tag.contains("广告")
-                        || tag.contains("催收") || tag.contains("营销")
-                        || tag.contains("推销"))
-                    tvTag.setTextColor(Color.parseColor("#FF9900"));
-                else if (tag.contains("查询中"))
-                    tvTag.setTextColor(Color.parseColor("#AAAAAA"));
-                else
-                    tvTag.setTextColor(Color.parseColor("#44CC44"));
-            }
-            // 文字内容变化后，重新按当前卡片宽度做自适应缩放（v3.17：字号跟随宽度，不再有独立档位）
+            TextView tv = floatView.findViewWithTag("tv_api");
+            if (tv == null) return;
+            tv.setText(tag);
+            applyTagColor(tv, tag);
             refreshTextSizing();
         });
+    }
+
+    private void updateBaiduTag(String tag) {
+        if (floatView == null) return;
+        floatView.post(() -> {
+            TextView tv = floatView.findViewWithTag("tv_baidu");
+            if (tv == null) return;
+            tv.setText(tag);
+            applyTagColor(tv, tag);
+            refreshTextSizing();
+        });
+    }
+
+    /** v5.4 从原来 updateTag() 里的判色逻辑抽出来，供 API查询/百度解析两行共用。 */
+    private void applyTagColor(TextView tv, String tag) {
+        if (tag.contains("诈骗"))
+            tv.setTextColor(Color.parseColor("#FF3333"));
+        else if (tag.contains("骚扰") || tag.contains("广告")
+                || tag.contains("催收") || tag.contains("营销")
+                || tag.contains("推销"))
+            tv.setTextColor(Color.parseColor("#FF9900"));
+        else if (tag.contains("查询中"))
+            tv.setTextColor(Color.parseColor("#AAAAAA"));
+        else
+            tv.setTextColor(Color.parseColor("#44CC44"));
     }
 
     /**
@@ -560,15 +596,19 @@ public class FloatWindowService extends Service {
         return Math.max(0, cardWidthPx - 28 * 2); // 28 = root.setPadding() 里的左右 padding 像素值
     }
 
-    /** 用当前有效宽度/字号基准，重新给 tv_num / tv_tag 定字号（拖角缩放、内容变化、设置实时生效都调这个）。 */
+    /** 用当前有效宽度/字号基准，重新给 tv_num / tv_api / tv_baidu 定字号（拖角缩放、内容变化、设置实时生效都调这个）。 */
     private void refreshTextSizing() {
         if (floatView == null) return;
         TextView tvNum = floatView.findViewWithTag("tv_num");
-        TextView tvTag = floatView.findViewWithTag("tv_tag");
+        TextView tvApi = floatView.findViewWithTag("tv_api");
+        TextView tvBaidu = floatView.findViewWithTag("tv_baidu");
         float scale = effectiveWidthFontScale();
         int maxWidthPx = effectiveMaxTextWidthPx();
         if (tvNum != null) fitTextToScreen(tvNum, NUM_BASE_SP * scale, maxWidthPx, 1);
-        if (tvTag != null) fitTextToScreen(tvTag, TAG_BASE_SP * scale, maxWidthPx, ModuleSettings.getQueryResultLines(this)); // v3.19：跟随"查询结果显示行数"设置
+        // v5.4：原来只有一个 tv_tag，现在 API查询/百度解析各自一个 TextView，
+        // 都跟随同一个"查询结果显示行数"设置。
+        if (tvApi != null) fitTextToScreen(tvApi, TAG_BASE_SP * scale, maxWidthPx, ModuleSettings.getQueryResultLines(this));
+        if (tvBaidu != null) fitTextToScreen(tvBaidu, TAG_BASE_SP * scale, maxWidthPx, ModuleSettings.getQueryResultLines(this));
     }
 
     /** dp → px 换算（FloatWindowService 内新增控件用；原有控件的写死像素值不受影响） */
@@ -796,7 +836,13 @@ public class FloatWindowService extends Service {
 
         float scale = effectiveWidthFontScale();
 
-        // ── 顶部：标签 + 号码（唯一承载拖动手势的区域，见 attachDragBehavior 调用处） ──
+        // ── 顶部：来电号码 / API查询 / 百度解析（唯一承载拖动手势的区域，见
+        //    attachDragBehavior 调用处）──
+        // v5.4 重新设计：原来这里固定是"标签在上、号码在下"两行，只有一个
+        // 查询结果。现在 API查询和百度解析是两条独立、互不等待的查询，各自
+        // 对应一行，加上来电号码一共三个候选行，具体先后顺序由用户在
+        // "悬浮窗设置"里用 ▲▼ 调整（ModuleSettings.getRowOrder()），每一行
+        // 显示与否分别看各自的开关（来电号码/API查询/百度解析）。
         LinearLayout topRow = new LinearLayout(this);
         topRow.setTag("top_row");
         topRow.setOrientation(LinearLayout.VERTICAL);
@@ -811,31 +857,45 @@ public class FloatWindowService extends Service {
         tvNum.setMaxLines(1);
         tvNum.setEllipsize(TextUtils.TruncateAt.END);
         tvNum.setText("");
-        // 是否显示来电号码（v3.13 新增，默认显示）：关闭后悬浮窗第二行（号码）不显示
+        // 是否显示来电号码（v3.13 新增，默认显示）
         tvNum.setVisibility(ModuleSettings.isShowCallerNumber(this) ? View.VISIBLE : View.GONE);
 
-        TextView tvTag = new TextView(this);
-        tvTag.setTag("tv_tag");
-        tvTag.setTextColor(Color.WHITE);
-        tvTag.setTextSize(TAG_BASE_SP * scale);
-        tvTag.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); // 标签加粗
-        tvTag.setShadowLayer(6f, 0f, 2f, Color.BLACK);
-        tvTag.setGravity(android.view.Gravity.CENTER);
-        // v3.19 新增设置项：查询结果显示"一行"（默认，超出截断）还是"两行"
-        // （超出的部分换行显示，再超出才截断）
-        tvTag.setMaxLines(ModuleSettings.getQueryResultLines(this));
-        tvTag.setEllipsize(TextUtils.TruncateAt.END);
-        tvTag.setText("查询中\u2026");
-        // 是否显示查询结果/标签（v3.15 新增，默认显示）：关闭后悬浮窗第一行（标签）不显示
-        tvTag.setVisibility(ModuleSettings.isShowQueryResult(this) ? View.VISIBLE : View.GONE);
+        TextView tvApi = new TextView(this);
+        tvApi.setTag("tv_api");
+        tvApi.setTextColor(Color.WHITE);
+        tvApi.setTextSize(TAG_BASE_SP * scale);
+        tvApi.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        tvApi.setShadowLayer(6f, 0f, 2f, Color.BLACK);
+        tvApi.setGravity(android.view.Gravity.CENTER);
+        tvApi.setMaxLines(ModuleSettings.getQueryResultLines(this));
+        tvApi.setEllipsize(TextUtils.TruncateAt.END);
+        tvApi.setText("查询中\u2026");
+        // "API查询"这一行显示与否，直接看这个板块自己的启用开关，不再有单独的
+        // "是否显示"设置——没启用就没什么可显示的。
+        tvApi.setVisibility(ModuleSettings.isCustomApiEnabled(this) ? View.VISIBLE : View.GONE);
 
-        // 标签在上，号码在下；两者都用 MATCH_PARENT 宽度，这样卡片宽度被拖动之后
-        // 文字才能正确居中/换行，而不是仍然按自身文字内容的自然宽度显示
-        LinearLayout.LayoutParams fullWidthWrapLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        topRow.addView(tvTag, fullWidthWrapLp);
-        topRow.addView(tvNum, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        TextView tvBaidu = new TextView(this);
+        tvBaidu.setTag("tv_baidu");
+        tvBaidu.setTextColor(Color.WHITE);
+        tvBaidu.setTextSize(TAG_BASE_SP * scale);
+        tvBaidu.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        tvBaidu.setShadowLayer(6f, 0f, 2f, Color.BLACK);
+        tvBaidu.setGravity(android.view.Gravity.CENTER);
+        tvBaidu.setMaxLines(ModuleSettings.getQueryResultLines(this));
+        tvBaidu.setEllipsize(TextUtils.TruncateAt.END);
+        tvBaidu.setText("查询中\u2026");
+        tvBaidu.setVisibility(ModuleSettings.isBaiduSilentQueryEnabled(this) ? View.VISIBLE : View.GONE);
+
+        // 三行都用 MATCH_PARENT 宽度，这样卡片宽度被拖动之后文字才能正确居中/
+        // 换行，而不是仍然按自身文字内容的自然宽度显示；具体添加顺序按
+        // getRowOrder() 来，每个 LayoutParams 都单独 new 一份，不跨 View 复用。
+        for (String key : ModuleSettings.getRowOrder(this).split(",")) {
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if ("api".equals(key)) topRow.addView(tvApi, rowLp);
+            else if ("baidu".equals(key)) topRow.addView(tvBaidu, rowLp);
+            else topRow.addView(tvNum, rowLp);
+        }
         root.addView(topRow, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -947,8 +1007,9 @@ public class FloatWindowService extends Service {
     }
 
     /**
-     * 设置页里"悬浮窗背景 / 是否显示来电号码 / 是否显示查询结果"这三项修改后，如果当前
-     * 正好有真实来电、悬浮窗正显示着，做一次局部刷新（不整体重建 floatView）。
+     * 设置页里"悬浮窗背景 / 是否显示来电号码 / API查询·百度解析启用状态 / 三行顺序"
+     * 这几项修改后，如果当前正好有真实来电、悬浮窗正显示着，做一次局部刷新（不整体
+     * 重建 floatView）。
      * 网页查询相关的整块设置（来源/深色模式/裁剪/默认展开/总开关）不在这里处理——
      * 分支太多，且拖角缩放已经天然解决了"所见即所得"的诉求；如果这块设置被关掉，
      * 当前正开着的网页区域会继续保持开着，直到下次悬浮窗重建（挂断/换号码）才会消失。
@@ -965,24 +1026,42 @@ public class FloatWindowService extends Service {
         }
 
         TextView tvNum = floatView.findViewWithTag("tv_num");
-        TextView tvTag = floatView.findViewWithTag("tv_tag");
+        TextView tvApi = floatView.findViewWithTag("tv_api");
+        TextView tvBaidu = floatView.findViewWithTag("tv_baidu");
         boolean showNum = ModuleSettings.isShowCallerNumber(this);
-        boolean showResult = ModuleSettings.isShowQueryResult(this);
+        boolean showApi = ModuleSettings.isCustomApiEnabled(this);
+        boolean showBaidu = ModuleSettings.isBaiduSilentQueryEnabled(this);
+
+        // v5.4 新增：三行的先后顺序也可能被改过（"悬浮窗设置"里的 ▲▼），这里
+        // 顺手按最新顺序重新排一遍 topRow 的子 View——复用同一批 TextView
+        // 实例，只是重新 addView 一次，不重新创建、不丢当前已经查到的文字内容。
+        LinearLayout topRow = floatView.findViewWithTag("top_row");
+        if (topRow != null) {
+            topRow.removeAllViews();
+            for (String key : ModuleSettings.getRowOrder(this).split(",")) {
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                View v = "api".equals(key) ? tvApi : "baidu".equals(key) ? tvBaidu : tvNum;
+                if (v != null) topRow.addView(v, rowLp);
+            }
+        }
 
         // 查询结果显示行数（v3.19 新增）：直接改 maxLines + ellipsize 重新生效，不做
         // 精确的高度补偿（不像"是否显示"那样有对称的显示/隐藏两态可以互相估算）——
         // 切换这项本来就不常发生，允许有一次轻微的高度跳动，下次悬浮窗重建
         // （新来电/挂断）或拖角缩放（会重新走 fitTextToScreen）时会自然恢复精确。
-        if (tvTag != null) tvTag.setMaxLines(ModuleSettings.getQueryResultLines(this));
+        if (tvApi != null) tvApi.setMaxLines(ModuleSettings.getQueryResultLines(this));
+        if (tvBaidu != null) tvBaidu.setMaxLines(ModuleSettings.getQueryResultLines(this));
 
         // 字体大小模式/档位（v3.19 新增）：和查询结果行数一样，直接重新走一遍
         // fitTextToScreen 重新生效，不做精确高度补偿，允许一次轻微跳动。
         if (!isCollapsed) refreshTextSizing();
 
         if (isCollapsed) {
-            // 折叠成球时这两行本来就不可见，只改可见性状态，不涉及尺寸/位置补偿
+            // 折叠成球时这几行本来就不可见，只改可见性状态，不涉及尺寸/位置补偿
             if (tvNum != null) tvNum.setVisibility(showNum ? View.VISIBLE : View.GONE);
-            if (tvTag != null) tvTag.setVisibility(showResult ? View.VISIBLE : View.GONE);
+            if (tvApi != null) tvApi.setVisibility(showApi ? View.VISIBLE : View.GONE);
+            if (tvBaidu != null) tvBaidu.setVisibility(showBaidu ? View.VISIBLE : View.GONE);
             return;
         }
 
@@ -990,12 +1069,16 @@ public class FloatWindowService extends Service {
         if (tvNum != null && (tvNum.getVisibility() == View.VISIBLE) != showNum) {
             deltaHeightPx += estimateVisibilityHeightDeltaPx(tvNum, showNum, NUM_BASE_SP, 1);
         }
-        if (tvTag != null && (tvTag.getVisibility() == View.VISIBLE) != showResult) {
-            deltaHeightPx += estimateVisibilityHeightDeltaPx(tvTag, showResult, TAG_BASE_SP, ModuleSettings.getQueryResultLines(this));
+        if (tvApi != null && (tvApi.getVisibility() == View.VISIBLE) != showApi) {
+            deltaHeightPx += estimateVisibilityHeightDeltaPx(tvApi, showApi, TAG_BASE_SP, ModuleSettings.getQueryResultLines(this));
+        }
+        if (tvBaidu != null && (tvBaidu.getVisibility() == View.VISIBLE) != showBaidu) {
+            deltaHeightPx += estimateVisibilityHeightDeltaPx(tvBaidu, showBaidu, TAG_BASE_SP, ModuleSettings.getQueryResultLines(this));
         }
 
         if (tvNum != null) tvNum.setVisibility(showNum ? View.VISIBLE : View.GONE);
-        if (tvTag != null) tvTag.setVisibility(showResult ? View.VISIBLE : View.GONE);
+        if (tvApi != null) tvApi.setVisibility(showApi ? View.VISIBLE : View.GONE);
+        if (tvBaidu != null) tvBaidu.setVisibility(showBaidu ? View.VISIBLE : View.GONE);
 
         if (deltaHeightPx != 0) {
             // 复用 v3.16 就有的"顶部锚点不动"位置补偿，避免重演之前网页开关那种跳动
@@ -1006,7 +1089,7 @@ public class FloatWindowService extends Service {
     }
 
     /**
-     * 估算 tv_num / tv_tag 从"隐藏"变"显示"（或反过来）会让悬浮窗高度变化多少像素。
+     * 估算 tv_num / tv_api / tv_baidu 从"隐藏"变"显示"（或反过来）会让悬浮窗高度变化多少像素。
      * 隐藏时：直接读它当前真实的 getHeight()（此时还是 VISIBLE，读到的是可靠的真实高度）。
      * 显示时：还没有真实布局结果，改用同样字号下的字体行高估算（Paint.getFontMetricsInt），
      * 不做"先测量、下一帧再纠正"的两步流程，避免重演 v3.16 修过的那种跳动问题。
