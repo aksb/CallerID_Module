@@ -57,9 +57,16 @@
         -->
         <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
 
+        <!--
+            windowSoftInputMode=stateAlwaysHidden：底部 dock 栏的号码输入框会
+            自动抢焦点，导致「点过输入框 → 回桌面 → 再打开 App」时键盘跟着
+            自动弹出。这个属性只禁止键盘"自动弹出"（回到前台/首次进入时），
+            不影响用户主动点击输入框后键盘正常弹出。
+        -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="stateAlwaysHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
