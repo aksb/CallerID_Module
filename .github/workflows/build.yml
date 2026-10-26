@@ -20,9 +20,10 @@ name: Build APK
 #     字符串换算（避免 "4.3" 和 "4.21" 谁大谁小的歧义），改成用当次构建的
 #     UTC 时间（精确到分钟数的时间戳）自动生成，天然严格递增，无需人管。
 #   - Systemize 模块内置的"占位 APK"由 :stub 模块编译得到；push 触发的
-#     这个 dev 构建用的是 debug 签名（跟同一次构建出的 APK 一致，足够
-#     用来验证"先装 App/先刷模块顺序随意"这套机制本身），跟正式 Release
-#     签名不是同一把 key，不能跟正式发布的 APK 混用，仅供测试。
+#     这个 dev 构建里，:app APK 和 :stub 占位 APK 都用正式签名 key 签名
+#     （v5.50 起，见下面"Decode release keystore"步骤），保证跟 Release
+#     完全同签，dev 包可以直接覆盖安装到装着正式包的手机上。没有配置
+#     RELEASE_KEYSTORE_* secrets 时退回 debug 签名（仅供本地流程验证）。
 
 on:
   push:
@@ -75,9 +76,26 @@ jobs:
           echo "vcode=${VCODE}" >> "$GITHUB_OUTPUT"
           echo "本次构建版本号：${VERSION}，versionCode：${VCODE}"
 
+      # v5.50 起：dev 构建也用正式签名（跟 release.yml 同一组 secrets）。
+      # GitHub Actions 每次运行的 debug.keystore 都是随机生成的，若 dev 包
+      # 用 debug 签名，跟手机上已装的正式签名包必然冲突，覆盖安装被系统
+      # 拒绝（装不上，或刷了 Systemize 模块时包状态损坏、打开空白）。
+      # 没配置 RELEASE_KEYSTORE_BASE64 时跳过，退回 debug 签名兜底。
+      - name: Decode release keystore from secret
+        run: |
+          if [ -z "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "未配置 RELEASE_KEYSTORE_BASE64 secret，本次 dev 构建退回 debug 签名"
+          else
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "RELEASE_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          fi
+
       - name: Build debug APK
         env:
           CI_VERSION_CODE: ${{ steps.ver.outputs.vcode }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: gradle :app:assembleDebug --stacktrace --no-daemon
 
       - name: Rename APK with shared version
@@ -108,16 +126,19 @@ jobs:
           path: out/Aksb2026CallerID-KeepAlive-Magisk-*.zip
           if-no-files-found: error
 
-      # Systemize 模块内置的占位 APK，这里用 debug 签名编译——跟上面同一次
-      # 构建出的 APK 是同一把 debug key，两者签名一致，足够验证"先装 App/
-      # 先刷模块顺序随意"这套机制；但跟正式 Release 签名不是同一把 key，
-      # 不能拿这里产出的模块去配官方 Release 页面下载的 APK。
+      # Systemize 模块内置的占位 APK，签名必须跟上面 :app 的 APK 完全一致
+      # （"先装 App/先刷模块顺序随意"这套机制的前提）。v5.50 起两者都走
+      # 同一把正式签名 key；没配置 secrets 时一起退回 debug 签名，仅供本地
+      # 流程验证，不能拿去真机覆盖安装。
       - name: Build stub debug APK (Systemize placeholder)
         env:
           CI_VERSION_CODE: ${{ steps.ver.outputs.vcode }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: gradle :stub:assembleDebug --stacktrace --no-daemon
 
-      - name: Package Systemize module (dev build, debug-signed placeholder)
+      - name: Package Systemize module (dev build, release-signed placeholder)
         run: |
           WORKDIR=$(mktemp -d)
           cp -r systemize-module/. "$WORKDIR/"

@@ -45,6 +45,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 跟 :app 保持同一套逻辑：CI 里配了正式签名环境变量时，debug 构建
+            // 也用正式签名，保证 Systemize 模块里的占位 APK 和 dev 构建的 :app
+            // APK 签名一致（"先装 App/先刷模块顺序随意"这套机制的前提）。
+            // 本地没配环境变量时退回默认 debug 签名。
+            def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
+            if (ksFile != null && new File(ksFile).exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
         release {
             minifyEnabled false
             def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")

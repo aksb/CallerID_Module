@@ -48,6 +48,19 @@ android {
     }
 
     buildTypes {
+        debug {
+            // v5.50 起：CI 里配置了正式签名环境变量时，debug 构建（dev 包）也用
+            // 正式签名——GitHub Actions 每次运行都是全新虚拟机，自动生成的
+            // debug.keystore 每次都不一样，导致两次 dev 构建之间、以及 dev 构建
+            // 和 Release 之间签名互不相同，覆盖安装必被系统拒绝（手机上表现为
+            // 装不上或装上后包状态异常）。统一用同一把正式 key 后，每次 push
+            // 的包都能直接覆盖安装。本地没配这几个环境变量时保持默认 debug
+            // 签名，不影响本地开发。
+            def ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
+            if (ksFile != null && new File(ksFile).exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
         release {
             minifyEnabled false
             // 有正式签名环境变量就用正式签名，没有就退回 debug 签名兜底
