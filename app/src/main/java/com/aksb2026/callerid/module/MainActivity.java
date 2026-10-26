@@ -1679,10 +1679,18 @@ public class MainActivity extends Activity {
         btnIdleLp.leftMargin = dp(8);
         dock.addView(btnIdle, btnIdleLp);
 
-        // dock 顶部加一条分割线，视觉上把 dock 和滚动内容区分隔开
+        // dock 顶部加一条分割线，视觉上把 dock 和滚动内容区分隔开。
+        // 必须显式指定"精确高度"（dp(1)），不能裸 addView（默认 WRAP_CONTENT）：
+        // 裸 View 在垂直 LinearLayout 里被按 AT_MOST 模式测量时，
+        // View.getDefaultSize() 会直接返回可用空间上限，分割线会撑满整屏，
+        // 把 weight=1 的 ScrollView 压成 0 高、把 dock 整个顶出屏幕外，
+        // 整个界面只剩背景色——这正是 v5.50 首版全屏空白的根因。
+        // （ScrollView 内部的分割线没这个问题，因为 ScrollView 给子 View
+        // 的是 UNSPECIFIED 模式，不会触发 getDefaultSize 的这个行为。）
         View dockDivider = new View(this);
         dockDivider.setBackgroundColor(0xFF2A2A2A);
-        dockDivider.setMinimumHeight(dp(1));
+        LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
 
         LinearLayout outer = new LinearLayout(this);
         outer.setOrientation(LinearLayout.VERTICAL);
@@ -1690,7 +1698,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
         outer.addView(sv, svLp);
-        outer.addView(dockDivider);
+        outer.addView(dockDivider, divLp);
         outer.addView(dock);
         setContentView(outer);
     }
