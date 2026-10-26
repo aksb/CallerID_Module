@@ -2,5 +2,5 @@ id=callerid_systemize
 name=来电识别 系统化增强
 version=v4.3
 versionCode=1
-author=aksb，创意来自 RecordYou
+author=aksb
 description=把「来电识别」安装成系统应用。
