@@ -323,42 +323,6 @@ public class MainActivity extends Activity {
                 .setNegativeButton("取消", null)
                 .show());
 
-        add(root, line(), 14);
-        LinearLayout boardSimCall = new LinearLayout(this);
-        boardSimCall.setOrientation(LinearLayout.VERTICAL);
-        addCollapsibleBoard(root, "sim_call", "模拟来电测试", boardSimCall);
-
-        etTestNumber = new EditText(this);
-        etTestNumber.setHint("输入号码，如 17896436252");
-        etTestNumber.setHintTextColor(0xFF555555);
-        etTestNumber.setTextColor(Color.WHITE);
-        etTestNumber.setTextSize(15);
-        etTestNumber.setInputType(InputType.TYPE_CLASS_PHONE);
-        etTestNumber.setText("17896436252");
-        etTestNumber.setBackgroundColor(0xFF1E1E1E);
-        etTestNumber.setPadding(dp(12), dp(10), dp(12), dp(10));
-        add(boardSimCall, etTestNumber, 8);
-
-        Button btnSim = btn("📲 模拟来电（弹悬浮窗）", 0xFF00897B);
-        btnSim.setOnClickListener(v -> {
-            String num = etTestNumber.getText().toString().trim();
-            if (num.isEmpty()) { toast("请先输入号码"); return; }
-            Intent i = new Intent(this, FloatWindowService.class);
-            i.setAction("com.callerid.ACTION_INCOMING");
-            i.putExtra("number", num);
-            startService(i);
-            toast("已触发：" + num);
-        });
-        add(boardSimCall, btnSim, 6);
-
-        Button btnIdle = btn("⏹ 模拟挂断（移除悬浮窗）", 0xFF455A64);
-        btnIdle.setOnClickListener(v -> {
-            Intent i = new Intent(this, FloatWindowService.class);
-            i.setAction("com.callerid.ACTION_IDLE");
-            startService(i);
-        });
-        add(boardSimCall, btnIdle, 6);
-
         // ── 悬浮窗设置（v3.18 新增独立板块）：归纳"是否显示来电号码/是否显示查询
         // 结果/悬浮窗背景"这几项原有设置，加上新增的"是否可移动"，位置维持不变
         // （原来就夹在"模拟来电测试"和"百度号码解析"之间，现在只是从"模拟来电
@@ -1294,7 +1258,7 @@ public class MainActivity extends Activity {
         Button btnClearOne = btn("🔄 清除当前号码缓存（重新查询）", 0xFF1565C0);
         btnClearOne.setOnClickListener(v -> {
             String num = etTestNumber.getText().toString().trim();
-            if (num.isEmpty()) { toast("请先在上方输入号码"); return; }
+            if (num.isEmpty()) { toast("请先输入号码"); return; }
             new AlertDialog.Builder(this)
                     .setTitle("确认清除")
                     .setMessage("确定清除号码 " + num + " 的缓存吗？清除后下次来电将重新联网查询")
@@ -1664,7 +1628,71 @@ public class MainActivity extends Activity {
         sv.setBackgroundColor(0xFF121212);
         sv.addView(root);
         scrollViewHolder[0] = sv;
-        setContentView(sv);
+
+        // ── 底部固定 dock 栏（永远固定在屏幕底部，类似 dock）────────────────
+        // 把原"模拟来电测试"板块的号码输入框 + 模拟来电 + 模拟挂断三个控件
+        // 拆出来平铺在这里，输入框占屏幕一半宽度，两个按钮各占一半另一半。
+        // 外层用垂直 LinearLayout 把 ScrollView（weight=1，吃掉剩余高度）和
+        // dock（WRAP_CONTENT）一起放进去，ScrollView 滚动时 dock 永远固定在底部。
+        LinearLayout dock = new LinearLayout(this);
+        dock.setOrientation(LinearLayout.HORIZONTAL);
+        dock.setGravity(Gravity.CENTER_VERTICAL);
+        dock.setBackgroundColor(0xFF1A1A1A);
+        dock.setPadding(dp(12), dp(8), dp(12), dp(8));
+
+        etTestNumber = new EditText(this);
+        etTestNumber.setHint("输入号码，如 17896436252");
+        etTestNumber.setHintTextColor(0xFF555555);
+        etTestNumber.setTextColor(Color.WHITE);
+        etTestNumber.setTextSize(15);
+        etTestNumber.setInputType(InputType.TYPE_CLASS_PHONE);
+        etTestNumber.setText("17896436252");
+        etTestNumber.setBackgroundColor(0xFF1E1E1E);
+        etTestNumber.setPadding(dp(12), dp(10), dp(12), dp(10));
+        LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        dock.addView(etTestNumber, etLp);
+
+        Button btnSim = btn("📲 模拟来电", 0xFF00897B);
+        btnSim.setOnClickListener(v -> {
+            String num = etTestNumber.getText().toString().trim();
+            if (num.isEmpty()) { toast("请先输入号码"); return; }
+            Intent i = new Intent(this, FloatWindowService.class);
+            i.setAction("com.callerid.ACTION_INCOMING");
+            i.putExtra("number", num);
+            startService(i);
+            toast("已触发：" + num);
+        });
+        LinearLayout.LayoutParams btnSimLp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.5f);
+        btnSimLp.leftMargin = dp(8);
+        dock.addView(btnSim, btnSimLp);
+
+        Button btnIdle = btn("⏹ 模拟挂断", 0xFF455A64);
+        btnIdle.setOnClickListener(v -> {
+            Intent i = new Intent(this, FloatWindowService.class);
+            i.setAction("com.callerid.ACTION_IDLE");
+            startService(i);
+        });
+        LinearLayout.LayoutParams btnIdleLp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.5f);
+        btnIdleLp.leftMargin = dp(8);
+        dock.addView(btnIdle, btnIdleLp);
+
+        // dock 顶部加一条分割线，视觉上把 dock 和滚动内容区分隔开
+        View dockDivider = new View(this);
+        dockDivider.setBackgroundColor(0xFF2A2A2A);
+        dockDivider.setMinimumHeight(dp(1));
+
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setBackgroundColor(0xFF121212);
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        outer.addView(sv, svLp);
+        outer.addView(dockDivider);
+        outer.addView(dock);
+        setContentView(outer);
     }
 
     // ── 缓存实时刷新（v1.7 新增，第4条：模拟来电/真实来电产生新查询结果后自动刷新列表） ──
